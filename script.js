@@ -1,6 +1,8 @@
 const canvas = document.getElementById("container");
 const ctx = canvas.getContext("2d");
 const temperatureDisplay = document.getElementById("temperature");
+const areaDisplay = document.getElementById("area");
+const pressureDisplay = document.getElementById("pressure");
 
 canvas.width = canvas.clientWidth;
 canvas.height = canvas.clientHeight;
@@ -10,8 +12,12 @@ const NITROGEN_MASS = 4.65e-26;
 
 const SECONDS_PER_FRAME = 1e-7;
 const METERS_PER_PIXEL = 1e-5;
+const SECONDS_PER_WINDOW = 1e-4;
 
 const DEGREES_OF_FREEDOM = 2; //degrees of freedom
+
+let curSeconds = 0;
+let totalImpulse = 0;
 
 class Ball {
     constructor(x, y, radius = 10, fillColor = "black", vx = 1, vy = 1, mass = 1) {
@@ -37,13 +43,18 @@ for (let i = 0; i < 100; i ++) {
                             Math.random() * canvas.height, 
                             5, 
                             "blue", 
-                            random(-0.5,0.5), 
-                            random(-0.3,0.3),
+                            random(-500, 500), 
+                            random(-500, 500),
                             NITROGEN_MASS));
     N ++;
 }
 
 function update() {
+    seconds += SECONDS_PER_FRAME;
+    if (seconds > SECONDS_PER_WINDOW) {
+        seconds -= SECONDS_PER_WINDOW;
+        totalImpulse = 0;
+    }
     ctx.clearRect(0,0,canvas.width, canvas.height);
     for (const b of molecules) {
         drawBall(b);
@@ -58,11 +69,21 @@ function update() {
     const temperature = calculateTemperature();
     temperatureDisplay.textContent = 
         `Temperature: ${temperature.toFixed(1)} K`;
+
+    const area = getArea();
+    areaDisplay.textContent = 
+        `Area: ${area} m^2`;
+    
     requestAnimationFrame(update);
+    
 }
 
 function getVelocity(ball) {
     return Math.sqrt(ball.vx**2 + ball.vy**2);
+}
+
+function getArea() {
+    return (canvas.width * METERS_PER_PIXEL) * (canvas.height * METERS_PER_PIXEL); 
 }
 
 function calculateTemperature() {
@@ -95,18 +116,22 @@ function updateWallCollision(ball) {
     if (ball.x - ball.radius <= 0) {
         ball.x = ball.radius - (ball.x - ball.radius);
         ball.vx = - ball.vx;
+        totalImpulse += 2 * ball.mass * Math.abs(ball.vx);
     }
     if (ball.x + ball.radius >= canvas.width) {
         ball.x = ball.x - (ball.x + ball.radius - canvas.width);
         ball.vx = -ball.vx;
+        totalImpulse += 2 * ball.mass * Math.abs(ball.vx);
     }
     if (ball.y - ball.radius <= 0) {
         ball.y = ball.radius - (ball.y - ball.radius);
         ball.vy = -ball.vy;
+        totalImpulse += 2 * ball.mass * Math.abs(ball.vy);
     }
     else if (ball.y + ball.radius >= canvas.height) {
         ball.y = ball.y - (ball.y + ball.radius - canvas.height);
         ball.vy = - ball.vy;
+        totalImpulse += 2 * ball.mass * Math.abs(ball.vy);
     }
 }
 
@@ -158,6 +183,15 @@ function updateBallBallCollision(ball1, ball2) {
 
     ball2.vx += (impulse / ball2.mass) * nx;
     ball2.vy += (impulse / ball2.mass) * ny;
+}
+
+function getPerimeter() {
+    return 2 * (canvas.height * METERS_PER_PIXEL) + 
+           2 * (canvas.width * METERS_PER_PIXEL);
+}
+
+function getPressure() {
+    return totalImpulse / (numSeconds * getPerimeter());
 }
 
 update();
