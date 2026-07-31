@@ -1,8 +1,11 @@
 const canvas = document.getElementById("container");
 const ctx = canvas.getContext("2d");
 const temperatureDisplay = document.getElementById("temperature");
+<<<<<<< HEAD
 const areaDisplay = document.getElementById("area");
 const pressureDisplay = document.getElementById("pressure");
+=======
+>>>>>>> 8d6476a0c082cad8d7e56952b16d5a8f99aee59d
 
 canvas.width = canvas.clientWidth;
 canvas.height = canvas.clientHeight;
@@ -12,6 +15,7 @@ const NITROGEN_MASS = 4.65e-26;
 
 const SECONDS_PER_FRAME = 1e-7;
 const METERS_PER_PIXEL = 1e-5;
+<<<<<<< HEAD
 const SECONDS_PER_WINDOW = 1e-4;
 
 const DEGREES_OF_FREEDOM = 2; //degrees of freedom
@@ -19,6 +23,11 @@ const DEGREES_OF_FREEDOM = 2; //degrees of freedom
 let curSeconds = 0;
 let totalImpulse = 0;
 
+=======
+
+const DEGREES_OF_FREEDOM = 2; //degrees of freedom
+
+>>>>>>> 8d6476a0c082cad8d7e56952b16d5a8f99aee59d
 class Ball {
     constructor(x, y, radius = 10, fillColor = "black", vx = 1, vy = 1, mass = 1) {
         this.x = x;
@@ -43,18 +52,26 @@ for (let i = 0; i < 100; i ++) {
                             Math.random() * canvas.height, 
                             5, 
                             "blue", 
+<<<<<<< HEAD
                             random(-500, 500), 
                             random(-500, 500),
+=======
+                            random(-0.5,0.5), 
+                            random(-0.3,0.3),
+>>>>>>> 8d6476a0c082cad8d7e56952b16d5a8f99aee59d
                             NITROGEN_MASS));
     N ++;
 }
 
 function update() {
+<<<<<<< HEAD
     seconds += SECONDS_PER_FRAME;
     if (seconds > SECONDS_PER_WINDOW) {
         seconds -= SECONDS_PER_WINDOW;
         totalImpulse = 0;
     }
+=======
+>>>>>>> 8d6476a0c082cad8d7e56952b16d5a8f99aee59d
     ctx.clearRect(0,0,canvas.width, canvas.height);
     for (const b of molecules) {
         drawBall(b);
@@ -69,6 +86,7 @@ function update() {
     const temperature = calculateTemperature();
     temperatureDisplay.textContent = 
         `Temperature: ${temperature.toFixed(1)} K`;
+<<<<<<< HEAD
 
     const area = getArea();
     areaDisplay.textContent = 
@@ -76,16 +94,22 @@ function update() {
     
     requestAnimationFrame(update);
     
+=======
+    requestAnimationFrame(update);
+>>>>>>> 8d6476a0c082cad8d7e56952b16d5a8f99aee59d
 }
 
 function getVelocity(ball) {
     return Math.sqrt(ball.vx**2 + ball.vy**2);
 }
 
+<<<<<<< HEAD
 function getArea() {
     return (canvas.width * METERS_PER_PIXEL) * (canvas.height * METERS_PER_PIXEL); 
 }
 
+=======
+>>>>>>> 8d6476a0c082cad8d7e56952b16d5a8f99aee59d
 function calculateTemperature() {
     let totalKE = 0;
     for (const ball of molecules) {
@@ -116,22 +140,34 @@ function updateWallCollision(ball) {
     if (ball.x - ball.radius <= 0) {
         ball.x = ball.radius - (ball.x - ball.radius);
         ball.vx = - ball.vx;
+<<<<<<< HEAD
         totalImpulse += 2 * ball.mass * Math.abs(ball.vx);
+=======
+>>>>>>> 8d6476a0c082cad8d7e56952b16d5a8f99aee59d
     }
     if (ball.x + ball.radius >= canvas.width) {
         ball.x = ball.x - (ball.x + ball.radius - canvas.width);
         ball.vx = -ball.vx;
+<<<<<<< HEAD
         totalImpulse += 2 * ball.mass * Math.abs(ball.vx);
+=======
+>>>>>>> 8d6476a0c082cad8d7e56952b16d5a8f99aee59d
     }
     if (ball.y - ball.radius <= 0) {
         ball.y = ball.radius - (ball.y - ball.radius);
         ball.vy = -ball.vy;
+<<<<<<< HEAD
         totalImpulse += 2 * ball.mass * Math.abs(ball.vy);
+=======
+>>>>>>> 8d6476a0c082cad8d7e56952b16d5a8f99aee59d
     }
     else if (ball.y + ball.radius >= canvas.height) {
         ball.y = ball.y - (ball.y + ball.radius - canvas.height);
         ball.vy = - ball.vy;
+<<<<<<< HEAD
         totalImpulse += 2 * ball.mass * Math.abs(ball.vy);
+=======
+>>>>>>> 8d6476a0c082cad8d7e56952b16d5a8f99aee59d
     }
 }
 
@@ -185,6 +221,7 @@ function updateBallBallCollision(ball1, ball2) {
     ball2.vy += (impulse / ball2.mass) * ny;
 }
 
+<<<<<<< HEAD
 function getPerimeter() {
     return 2 * (canvas.height * METERS_PER_PIXEL) + 
            2 * (canvas.width * METERS_PER_PIXEL);
@@ -194,4 +231,6 @@ function getPressure() {
     return totalImpulse / (numSeconds * getPerimeter());
 }
 
+=======
+>>>>>>> 8d6476a0c082cad8d7e56952b16d5a8f99aee59d
 update();
