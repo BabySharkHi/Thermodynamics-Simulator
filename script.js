@@ -3,6 +3,7 @@ const ctx = canvas.getContext("2d");
 const temperatureDisplay = document.getElementById("temperature");
 const areaDisplay = document.getElementById("area");
 const pressureDisplay = document.getElementById("pressure");
+const moleculeCountDisplay = document.getElementById("molecule-count");
 
 canvas.width = canvas.clientWidth;
 canvas.height = canvas.clientHeight;
@@ -38,15 +39,40 @@ function random(a, b) {
 const molecules = [];
 let N = 0;
 
+document.getElementById("add-molecule")
+        .addEventListener("click", addMolecule);
+
+document.getElementById("remove-molecule")
+        .addEventListener("click", removeMolecule);
+
 for (let i = 0; i < 100; i ++) {
-    molecules.push(new Ball(Math.random() * canvas.width, 
-                            Math.random() * canvas.height, 
-                            5, 
-                            "blue", 
-                            random(-500, 500), 
-                            random(-500, 500),
+    createMolecule();
+}
+
+function createMolecule() {
+    molecules.push(new Ball(Math.random() * canvas.width,
+                            Math.random() * canvas.height,
+                            5,
+                            "blue",
+                            random(-500,500),
+                            random(-500,500),
                             NITROGEN_MASS));
     N ++;
+}
+
+function addMolecule() {
+    createMolecule();
+}
+
+function removeMolecule() {
+    if (molecules.length == 0) {
+        console.log("error, no more molecules to remove");
+    }
+    else {
+        let idx = Math.floor(random(0,N));
+        molecules.splice(idx,1);
+        N--;
+    }
 }
 
 function update() {
@@ -76,13 +102,16 @@ function update() {
     
     const pressure = getPressure();
     pressureDisplay.textContent =
-        `Pressure: ${pressure} Pa`
+        `Pressure: ${pressure} Pa`;
+    
+    moleculeCountDisplay.textContent =
+        `Molecule Count: ${N}`;
     
     requestAnimationFrame(update);
     
 }
 
-function getVelocity(ball) {
+function getSpeed(ball) {
     return Math.sqrt(ball.vx**2 + ball.vy**2);
 }
 
