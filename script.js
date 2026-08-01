@@ -76,7 +76,7 @@ function update() {
     
     const pressure = getPressure();
     pressureDisplay.textContent =
-        `Pressure: ${area} Pa`
+        `Pressure: ${pressure} Pa`
     
     requestAnimationFrame(update);
     
