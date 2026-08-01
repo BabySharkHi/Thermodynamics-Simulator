@@ -45,17 +45,17 @@ document.getElementById("add-molecule")
 document.getElementById("remove-molecule")
         .addEventListener("click", removeMolecule);
 
-for (let i = 0; i < 100; i ++) {
+for (let i = 0; i < 200; i ++) {
     createMolecule();
 }
 
 function createMolecule() {
     molecules.push(new Ball(Math.random() * canvas.width,
                             Math.random() * canvas.height,
-                            5,
+                            2,
                             "blue",
-                            random(-500,500),
-                            random(-500,500),
+                            random(-100,100),//random(-500),
+                            random(-100,100),//random(-500,500),
                             NITROGEN_MASS));
     N ++;
 }
@@ -98,19 +98,26 @@ function update() {
 
     const area = getArea();
     areaDisplay.textContent = 
-        `Area: ${area} m^2`;
+        `Area: ${area.toPrecision(3)} m^2`;
     
     const pressure = getPressure();
     pressureDisplay.textContent =
-        `Pressure: ${pressure} Pa`;
+        `Pressure: ${pressure.toPrecision(3)} Pa`;
     
     moleculeCountDisplay.textContent =
         `Molecule Count: ${N}`;
-    
-    drawSpeedGraph();
+
+    const {bins: speedCounts, labels: xAxisLabels} = getSpeedCountsAndLabels();
+    speedChart.data.datasets[0].data = speedCounts;
+    speedChart.data.labels = xAxisLabels;
+    speedChart.options.plugins.annotation.
+               annotations.rmsLine.value = getRMSSpeed();
+    speedChart.options.plugins.annotation.
+               annotations.rmsLine.label.content = 
+                    `RMS: ${getRMSSpeed().toFixed(1)} m/s`
+    speedChart.update();
 
     requestAnimationFrame(update);
-    
 }
 
 function getSpeed(ball) {
@@ -229,55 +236,99 @@ function getPressure() {
     return totalImpulse / (curSeconds * getPerimeter());
 }
 
+function getRMSSpeed() {
+    //return Math.sqrt(DEGREES_OF_FREEDOM * BOLTZMANN_CONSTANT * calculateTemperature() / molecule[0].mass);
+    var sumSquares = 0;
+    for (const ball of molecules) {
+        sumSquares += getSpeed(ball) ** 2;
+    }
+    return Math.sqrt(sumSquares / N);
+}
+
 const graphCanvas = document.getElementById("velocity-graph");
-const graphCtx = graphCanvas.getContext("2d");
 
 graphCanvas.width = graphCanvas.clientWidth;
 graphCanvas.height = graphCanvas.clientHeight;
 
-function getSpeedCounts(intervalSize = 10, intervalCount = 100) {
+function getSpeedCountsAndLabels(intervalSize = 10, intervalCount = 100) {
     const bins = new Array(intervalCount).fill(0);
+    const labels = new Array(intervalCount);
+
+    for (let i = 0; i < intervalCount; i ++) {
+        labels[i] = `[${intervalSize * i},${intervalSize * (i+1)}]`;
+    }
 
     for (const ball of molecules) {
         let idx = Math.floor(getSpeed(ball) / intervalSize);
         bins[idx] ++;
     }
 
-    return bins;
+    return {bins, labels};
 }
 
-function drawSpeedGraph(intervalSize = 10, intervalCount = 100) {
-    const bins = getSpeedCounts();
+function createSpeedGraph(intervalSize = 10, intervalCount = 100) {
+    const {bins: speedCounts, labels: xAxisLabels} = getSpeedCountsAndLabels();
+    return new Chart(graphCanvas, {
+        type: "bar",
+        data: {
+            labels: xAxisLabels,
+            datasets: [
+                {
+                    label: "Speed Intervals",
+                    data: speedCounts,
+                    borderWidth: 1,
+                    borderColor: "turquoise"
+                }
+            ]
+        },
+        options: {
+            responsive: true,
+            plugins: {
+                title: {
+                    display: true,
+                    text: "Speed Distribution"
+                },
 
-    graphCtx.clearRect(
-        0,
-        0,
-        graphCanvas.width,
-        graphCanvas.height
-    );
+                legend: {
+                    display: true
+                },
 
-    const paddingX = 30;
-    const paddingY = 20;
-    const graphWidth = graphCanvas.width - 2 * paddingX;
-    const graphHeight = graphCanvas.height - 2 * paddingY;
+                annotation: {
+                    annotations: {
+                        rmsLine: {
+                            type: "line",
+                            scaleID: "x",
+                            value: 0,
+                            borderWidth: 2,
 
-    const startX = paddingX;
-    const startY = graphCanvas.height - paddingY;
+                            label: {
+                                display: true,
+                                content: "RMS speed"
+                            }
+                        }
+                    }
+                }
+            }, 
+            scales: {
+                x: {
+                    title: {
+                        display: true,
+                        text: "Speed (m/s)"
+                    }
+                },
+                y: {
+                    beginAtZero: true,
 
-    const maxCount = Math.max(...bins, 1);
-    const barWidth = graphWidth / intervalCount;
-
-    for (let i = 0; i < bins.length; i ++) {
-        const barHeight = bins[i] / maxCount * graphHeight;
-        graphCtx.fillRect(
-            startX + i * barWidth,
-            startY - barHeight,
-            barWidth,
-            barHeight
-        );
-    }
+                    title: {
+                        display: true,
+                        text: "Number of Molecules"
+                    }
+                }
+            }
+        }
+    });
 }
 
-
+const speedChart = createSpeedGraph();
 
 update();
