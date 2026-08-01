@@ -50,9 +50,9 @@ for (let i = 0; i < 100; i ++) {
 }
 
 function update() {
-    seconds += SECONDS_PER_FRAME;
-    if (seconds > SECONDS_PER_WINDOW) {
-        seconds -= SECONDS_PER_WINDOW;
+    curSeconds += SECONDS_PER_FRAME;
+    if (curSeconds > SECONDS_PER_WINDOW) {
+        curSeconds -= SECONDS_PER_WINDOW;
         totalImpulse = 0;
     }
     ctx.clearRect(0,0,canvas.width, canvas.height);
@@ -73,6 +73,10 @@ function update() {
     const area = getArea();
     areaDisplay.textContent = 
         `Area: ${area} m^2`;
+    
+    const pressure = getPressure();
+    pressureDisplay.textContent =
+        `Pressure: ${area} Pa`
     
     requestAnimationFrame(update);
     
@@ -191,7 +195,7 @@ function getPerimeter() {
 }
 
 function getPressure() {
-    return totalImpulse / (numSeconds * getPerimeter());
+    return totalImpulse / (curSeconds * getPerimeter());
 }
 
 update();
