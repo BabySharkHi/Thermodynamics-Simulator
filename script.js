@@ -107,6 +107,8 @@ function update() {
     moleculeCountDisplay.textContent =
         `Molecule Count: ${N}`;
     
+    drawSpeedGraph();
+
     requestAnimationFrame(update);
     
 }
@@ -122,7 +124,7 @@ function getArea() {
 function calculateTemperature() {
     let totalKE = 0;
     for (const ball of molecules) {
-        totalKE += 1/2 * ball.mass * getVelocity(ball) ** 2;
+        totalKE += 1/2 * ball.mass * getSpeed(ball) ** 2;
     }
 
     return totalKE * 2 / (DEGREES_OF_FREEDOM * N * BOLTZMANN_CONSTANT);
@@ -226,5 +228,56 @@ function getPerimeter() {
 function getPressure() {
     return totalImpulse / (curSeconds * getPerimeter());
 }
+
+const graphCanvas = document.getElementById("velocity-graph");
+const graphCtx = graphCanvas.getContext("2d");
+
+graphCanvas.width = graphCanvas.clientWidth;
+graphCanvas.height = graphCanvas.clientHeight;
+
+function getSpeedCounts(intervalSize = 10, intervalCount = 100) {
+    const bins = new Array(intervalCount).fill(0);
+
+    for (const ball of molecules) {
+        let idx = Math.floor(getSpeed(ball) / intervalSize);
+        bins[idx] ++;
+    }
+
+    return bins;
+}
+
+function drawSpeedGraph(intervalSize = 10, intervalCount = 100) {
+    const bins = getSpeedCounts();
+
+    graphCtx.clearRect(
+        0,
+        0,
+        graphCanvas.width,
+        graphCanvas.height
+    );
+
+    const paddingX = 30;
+    const paddingY = 20;
+    const graphWidth = graphCanvas.width - 2 * paddingX;
+    const graphHeight = graphCanvas.height - 2 * paddingY;
+
+    const startX = paddingX;
+    const startY = graphCanvas.height - paddingY;
+
+    const maxCount = Math.max(...bins, 1);
+    const barWidth = graphWidth / intervalCount;
+
+    for (let i = 0; i < bins.length; i ++) {
+        const barHeight = bins[i] / maxCount * graphHeight;
+        graphCtx.fillRect(
+            startX + i * barWidth,
+            startY - barHeight,
+            barWidth,
+            barHeight
+        );
+    }
+}
+
+
 
 update();
