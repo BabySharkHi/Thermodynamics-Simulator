@@ -5,14 +5,23 @@ const areaDisplay = document.getElementById("area");
 const pressureDisplay = document.getElementById("pressure");
 const moleculeCountDisplay = document.getElementById("molecule-count");
 
+const STARTING_MOLECULES = 200;
+
+const maxWidthFactor = 2.0;
 canvas.width = canvas.clientWidth;
 canvas.height = canvas.clientHeight;
+const maxWidth = canvas.width;
+const startingWidth = canvas.width / maxWidthFactor;
+
+const widthSlider = document.getElementById("width-slider");
+const widthScaleDisplay = document.getElementById("width-scale");
+var widthFactor = 1;
 
 const BOLTZMANN_CONSTANT = 1.380649e-23;
 const NITROGEN_MASS = 4.65e-26;
 
-const SECONDS_PER_FRAME = 1e-7;
-const METERS_PER_PIXEL = 1e-5;
+const SECONDS_PER_FRAME = 1e-5;
+const METERS_PER_PIXEL = 1e-3;
 const SECONDS_PER_WINDOW = 1e-4;
 
 const DEGREES_OF_FREEDOM = 2; //degrees of freedom
@@ -45,17 +54,14 @@ document.getElementById("add-molecule")
 document.getElementById("remove-molecule")
         .addEventListener("click", removeMolecule);
 
-for (let i = 0; i < 200; i ++) {
-    createMolecule();
-}
 
 function createMolecule() {
     molecules.push(new Ball(Math.random() * canvas.width,
                             Math.random() * canvas.height,
-                            2,
+                            5,
                             "blue",
-                            random(-100,100),//random(-500),
-                            random(-100,100),//random(-500,500),
+                            random(-500,500),
+                            random(-500,500),
                             NITROGEN_MASS));
     N ++;
 }
@@ -75,6 +81,14 @@ function removeMolecule() {
     }
 }
 
+function initialize() {
+    for (let i = 0; i < STARTING_MOLECULES; i ++) {
+        createMolecule();
+    }
+
+    update();
+}
+
 function update() {
     curSeconds += SECONDS_PER_FRAME;
     if (curSeconds > SECONDS_PER_WINDOW) {
@@ -86,6 +100,9 @@ function update() {
         drawBall(b);
         updateBall(b);
     }
+    
+    drawContainer();
+
     for (let i = 0; i < molecules.length; i ++) {
         for (let j = i + 1; j < molecules.length; j ++) {
             updateBallBallCollision(molecules[i], molecules[j]);
@@ -107,15 +124,7 @@ function update() {
     moleculeCountDisplay.textContent =
         `Molecule Count: ${N}`;
 
-    const {bins: speedCounts, labels: xAxisLabels} = getSpeedCountsAndLabels();
-    speedChart.data.datasets[0].data = speedCounts;
-    speedChart.data.labels = xAxisLabels;
-    speedChart.options.plugins.annotation.
-               annotations.rmsLine.value = getRMSSpeed();
-    speedChart.options.plugins.annotation.
-               annotations.rmsLine.label.content = 
-                    `RMS: ${getRMSSpeed().toFixed(1)} m/s`
-    speedChart.update();
+    updateSpeedChart();
 
     requestAnimationFrame(update);
 }
@@ -236,7 +245,7 @@ function getPressure() {
     return totalImpulse / (curSeconds * getPerimeter());
 }
 
-function getRMSSpeed() {
+function getRMSSpeed(intervals,) {
     //return Math.sqrt(DEGREES_OF_FREEDOM * BOLTZMANN_CONSTANT * calculateTemperature() / molecule[0].mass);
     var sumSquares = 0;
     for (const ball of molecules) {
@@ -245,21 +254,28 @@ function getRMSSpeed() {
     return Math.sqrt(sumSquares / N);
 }
 
+function getBin(val, intervalSize = 10, intervalCount = 100) {
+    return Math.min(intervalCount, 
+                    Math.floor(val / intervalSize));
+}
+
 const graphCanvas = document.getElementById("velocity-graph");
 
 graphCanvas.width = graphCanvas.clientWidth;
 graphCanvas.height = graphCanvas.clientHeight;
 
 function getSpeedCountsAndLabels(intervalSize = 10, intervalCount = 100) {
-    const bins = new Array(intervalCount).fill(0);
-    const labels = new Array(intervalCount);
+    const bins = new Array(intervalCount+1).fill(0);
+    const labels = new Array(intervalCount+1);
 
     for (let i = 0; i < intervalCount; i ++) {
         labels[i] = `[${intervalSize * i},${intervalSize * (i+1)}]`;
     }
+    labels[intervalCount] = `>=${intervalSize * intervalCount}`;
 
     for (const ball of molecules) {
         let idx = Math.floor(getSpeed(ball) / intervalSize);
+        idx = Math.min(idx, intervalCount);
         bins[idx] ++;
     }
 
@@ -331,4 +347,38 @@ function createSpeedGraph(intervalSize = 10, intervalCount = 100) {
 
 const speedChart = createSpeedGraph();
 
-update();
+function updateSpeedChart() {
+    const {bins: speedCounts, labels: xAxisLabels} = getSpeedCountsAndLabels();
+
+    speedChart.data.datasets[0].data = speedCounts;
+    speedChart.data.labels = xAxisLabels;
+    speedChart.options.plugins.annotation.
+               annotations.rmsLine.value = getBin(getRMSSpeed());
+    speedChart.options.plugins.annotation.
+               annotations.rmsLine.label.content = 
+                    `RMS: ${getRMSSpeed().toFixed(1)} m/s`
+    speedChart.update();
+}
+
+function drawContainer() {
+    gasWidth = widthFactor * startingWidth;
+
+    ctx.fillStyle = "white";
+    ctx.fillRect(gasWidth, 0, canvas.width - gasWidth, canvas.height);
+
+    ctx.beginPath();
+    ctx.moveTo(gasWidth,0);
+    ctx.lineTo(gasWidth, canvas.height);
+    ctx.lineWidth = 3;
+    ctx.strokeStyle = "black";
+    ctx.stroke();
+}
+
+widthSlider.addEventListener("input", function () {
+    widthFactor = Number(widthSlider.value);
+    widthScaleDisplay.textContent = 
+        `${widthFactor.toFixed(2)}x`;
+    }
+);
+
+initialize();
