@@ -5,10 +5,12 @@ const areaDisplay = document.getElementById("area");
 const pressureDisplay = document.getElementById("pressure");
 const moleculeCountDisplay = document.getElementById("molecule-count");
 
+const pausePlayButton = document.getElementById("pause-play-button");
+let isPaused = false;
+
 const STARTING_MOLECULES = 200;
 
 const maxHeightFactor = 2.0;
-
 canvas.width = canvas.clientWidth;
 canvas.height = canvas.clientHeight;
 const maxHeight = canvas.height;
@@ -91,6 +93,10 @@ function initialize() {
 }
 
 function update() {
+    if (isPaused) {
+        requestAnimationFrame(update);
+        return;
+    }
     curSeconds += SECONDS_PER_FRAME;
     if (curSeconds > SECONDS_PER_WINDOW) {
         curSeconds -= SECONDS_PER_WINDOW;
@@ -365,9 +371,13 @@ function getHeight() {
     return heightFactor * startingHeight;
 }
 
+function getTopWall() {
+    return canvas.height - getHeight();
+}
+
 function drawContainer() {
 
-    topWall = canvas.height - getHeight();
+    topWall = getTopWall();
     ctx.fillStyle = "white";
     ctx.fillRect(0,0,canvas.width, topWall);
 
@@ -387,4 +397,7 @@ heightSlider.addEventListener("input", function () {
     }
 );
 
+pausePlayButton.addEventListener("click", function () {
+    isPaused = !isPaused;
+})
 initialize();
