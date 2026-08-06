@@ -7,15 +7,16 @@ const moleculeCountDisplay = document.getElementById("molecule-count");
 
 const STARTING_MOLECULES = 200;
 
-const maxWidthFactor = 2.0;
+const maxHeightFactor = 2.0;
+
 canvas.width = canvas.clientWidth;
 canvas.height = canvas.clientHeight;
-const maxWidth = canvas.width;
-const startingWidth = canvas.width / maxWidthFactor;
+const maxHeight = canvas.height;
+const startingHeight = canvas.height / maxHeightFactor;
 
-const widthSlider = document.getElementById("width-slider");
-const widthScaleDisplay = document.getElementById("width-scale");
-var widthFactor = 1;
+const heightSlider = document.getElementById("height-slider");
+const heightScaleDisplay = document.getElementById("height-scale");
+var heightFactor = 1;
 
 const BOLTZMANN_CONSTANT = 1.380649e-23;
 const NITROGEN_MASS = 4.65e-26;
@@ -134,7 +135,7 @@ function getSpeed(ball) {
 }
 
 function getArea() {
-    return (canvas.width * METERS_PER_PIXEL) * (canvas.height * METERS_PER_PIXEL); 
+    return (canvas.width * METERS_PER_PIXEL) * (getHeight() * METERS_PER_PIXEL); 
 }
 
 function calculateTemperature() {
@@ -360,24 +361,29 @@ function updateSpeedChart() {
     speedChart.update();
 }
 
-function drawContainer() {
-    gasWidth = widthFactor * startingWidth;
+function getHeight() {
+    return heightFactor * startingHeight;
+}
 
+function drawContainer() {
+
+    topWall = canvas.height - getHeight();
     ctx.fillStyle = "white";
-    ctx.fillRect(gasWidth, 0, canvas.width - gasWidth, canvas.height);
+    ctx.fillRect(0,0,canvas.width, topWall);
+
 
     ctx.beginPath();
-    ctx.moveTo(gasWidth,0);
-    ctx.lineTo(gasWidth, canvas.height);
+    ctx.moveTo(0, topWall);
+    ctx.lineTo(canvas.width, topWall)
     ctx.lineWidth = 3;
     ctx.strokeStyle = "black";
     ctx.stroke();
 }
 
-widthSlider.addEventListener("input", function () {
-    widthFactor = Number(widthSlider.value);
-    widthScaleDisplay.textContent = 
-        `${widthFactor.toFixed(2)}x`;
+heightSlider.addEventListener("input", function () {
+    heightFactor = 2 ** Number(heightSlider.value);
+    heightScaleDisplay.textContent = 
+        `${heightFactor.toFixed(2)}x`;
     }
 );
 

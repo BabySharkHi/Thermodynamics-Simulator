@@ -1,8 +1,21 @@
+#main-layout {
+    display: flex;
+    gap: 20px;
+}
+
+#simulation-panel {
+    flex: 2;
+}
+
 #container {
-    width: 60%;
-    height: 50vh;
+    width: 100%;
+    height: 90vh;
     border: 3px solid black;
     display: block;
     margin: 20px auto;
+}
+
+#control-panel {
+    flex: 3;
 }
 
