@@ -19,10 +19,15 @@
     flex: 3;
 }
 
-#pause-play-button {
-    display: block;
-    margin: 0 auto;
-    padding: 14px, 24px;
+.simulation-controls {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    gap: 12px;
+}
+#pause-play-button,
+#sim-speed-button {
+    padding: 14px 24px;
     font-size: 2rem;
     cursor: pointer;
 }

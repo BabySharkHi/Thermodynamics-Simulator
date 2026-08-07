@@ -7,7 +7,11 @@
         <div id = "main-layout">
             <div id = "simulation-panel">
                 <canvas id = "container"></canvas> 
-                <button id = "pause-play-button">▶️</button>
+                <div class = "simulation-controls">
+                    <button id = "pause-play-button">▶️</button>
+                    <button id = "sim-speed-button">1x</button>
+                </div>
+                <p id = "sim-speed">1 Frame = 0.00001 seconds</p>
             </div>
             <div id = "control-panel">
                 <p id ="temperature">Temperature: 0 K</p>

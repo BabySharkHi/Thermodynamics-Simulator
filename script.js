@@ -6,7 +6,14 @@ const pressureDisplay = document.getElementById("pressure");
 const moleculeCountDisplay = document.getElementById("molecule-count");
 
 const pausePlayButton = document.getElementById("pause-play-button");
-let isPaused = false;
+let isPaused = true;
+
+const simSpeedButton = document.getElementById("sim-speed-button");
+const simSpeedFactors = [0.1,0.2,0.5,1,2,5,10];
+let simSpeedIndex = 3;
+let simSpeedFactor = 1;
+const simSpeedDisplay = document.getElementById("sim-speed");
+
 
 const STARTING_MOLECULES = 200;
 
@@ -31,6 +38,7 @@ const DEGREES_OF_FREEDOM = 2; //degrees of freedom
 
 let curSeconds = 0;
 let totalImpulse = 0;
+const collisionTimes = [];
 
 class Ball {
     constructor(x, y, radius = 10, fillColor = "black", vx = 1, vy = 1, mass = 1) {
@@ -93,11 +101,28 @@ function initialize() {
 }
 
 function update() {
+
+    const temperature = calculateTemperature();
+    temperatureDisplay.textContent = 
+        `Temperature: ${temperature.toFixed(1)} K`;
+
+    const area = getArea();
+    areaDisplay.textContent = 
+        `Area: ${area.toPrecision(3)} m^2`;
+    
+    const pressure = getPressure();
+    pressureDisplay.textContent =
+        `Pressure: ${pressure.toPrecision(3)} Pa`;
+    
+    moleculeCountDisplay.textContent =
+        `Molecule Count: ${N}`;
+
     if (isPaused) {
         requestAnimationFrame(update);
         return;
     }
-    curSeconds += SECONDS_PER_FRAME;
+
+    curSeconds += getSimulationSpeed();
     if (curSeconds > SECONDS_PER_WINDOW) {
         curSeconds -= SECONDS_PER_WINDOW;
         totalImpulse = 0;
@@ -115,21 +140,6 @@ function update() {
             updateBallBallCollision(molecules[i], molecules[j]);
         }
     }
-
-    const temperature = calculateTemperature();
-    temperatureDisplay.textContent = 
-        `Temperature: ${temperature.toFixed(1)} K`;
-
-    const area = getArea();
-    areaDisplay.textContent = 
-        `Area: ${area.toPrecision(3)} m^2`;
-    
-    const pressure = getPressure();
-    pressureDisplay.textContent =
-        `Pressure: ${pressure.toPrecision(3)} Pa`;
-    
-    moleculeCountDisplay.textContent =
-        `Molecule Count: ${N}`;
 
     updateSpeedChart();
 
@@ -165,8 +175,8 @@ function distance(x1,y1,x2,y2) {
 }
 
 function updateBall(ball) {
-    ball.x += ball.vx * SECONDS_PER_FRAME / METERS_PER_PIXEL;
-    ball.y += ball.vy * SECONDS_PER_FRAME / METERS_PER_PIXEL;
+    ball.x += ball.vx * getSimulationSpeed() / METERS_PER_PIXEL;
+    ball.y += ball.vy * getSimulationSpeed() / METERS_PER_PIXEL;
     updateWallCollision(ball);
 }
 
@@ -177,17 +187,17 @@ function updateWallCollision(ball) {
         totalImpulse += 2 * ball.mass * Math.abs(ball.vx);
     }
     if (ball.x + ball.radius >= canvas.width) {
-        ball.x = ball.x - (ball.x + ball.radius - canvas.width);
+        ball.x = ball.x - 2 * (ball.x + ball.radius - canvas.width);
         ball.vx = -ball.vx;
         totalImpulse += 2 * ball.mass * Math.abs(ball.vx);
     }
-    if (ball.y - ball.radius <= 0) {
-        ball.y = ball.radius - (ball.y - ball.radius);
+    if (ball.y - ball.radius <= getTopWall()) {
+        ball.y = ball.y - 2 * (ball.y - ball.radius - getTopWall());
         ball.vy = -ball.vy;
         totalImpulse += 2 * ball.mass * Math.abs(ball.vy);
     }
-    else if (ball.y + ball.radius >= canvas.height) {
-        ball.y = ball.y - (ball.y + ball.radius - canvas.height);
+    if (ball.y + ball.radius >= canvas.height) {
+        ball.y = ball.y - 2 * (ball.y + ball.radius - canvas.height);
         ball.vy = - ball.vy;
         totalImpulse += 2 * ball.mass * Math.abs(ball.vy);
     }
@@ -399,5 +409,24 @@ heightSlider.addEventListener("input", function () {
 
 pausePlayButton.addEventListener("click", function () {
     isPaused = !isPaused;
+    if (isPaused) {
+        pausePlayButton.textContent = "▶️";
+    }
+    else {
+        pausePlayButton.textContent = "⏸️";
+    }
+});
+
+function getSimulationSpeed() {
+    return simSpeedFactor * SECONDS_PER_FRAME;
+}
+
+simSpeedButton.addEventListener("click", function () {
+    simSpeedIndex = (simSpeedIndex + 1) % simSpeedFactors.length;
+    simSpeedFactor = simSpeedFactors[simSpeedIndex];
+    simSpeedButton.textContent = `${simSpeedFactor}x`;
+    simSpeedDisplay.textContent = 
+        `1 frame = ${getSimulationSpeed().toPrecision(1)} seconds`;
 })
+
 initialize();
