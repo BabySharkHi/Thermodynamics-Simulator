@@ -14,23 +14,68 @@
                 <p id = "sim-speed">1 Frame = 0.00001 seconds</p>
             </div>
             <div id = "control-panel">
+                <div id="state-controls">
+                    <div class="state-control">
+                        <label for="temperature-slider">Temperature</label>
+                        <input
+                            id="temp-slider"
+                            type="range"
+                            min="1"
+                            max="1000"
+                            value="300"
+                        >
+                        
+                        <input
+                            id="temp-number-input"
+                            type="number"
+                            min="1"
+                            max="1000"
+                            value="300"
+                        >
+                        <span>K</span>
+                    </div>
+                    <div class="state-control">
+                        <label for="mole-slider">Number of Moles</label>
+                        <input
+                            id="mole-slider"
+                            type="range"
+                            min="1"
+                            max="2000"
+                            value="200"
+                        >
+
+                        <input
+                            id="mole-number-input"
+                            type="number"
+                            min="1"
+                            max="2000"
+                            value="200"
+                        >
+                        <span>mol</span>
+                    </div>
+                
+                    <div class="state-control">
+                        <label for="height-slider">Container height</label>
+                        <input
+                            id="height-slider"
+                            type="range"
+                            min="-1"
+                            max="1"
+                            step="0.01"
+                            value="0"
+                        >
+                        <span id="height-scale">1.00x</span>
+                    </div>
+                </div>
+                
                 <p id ="temperature">Temperature: 0 K</p>
                 <p id = "area">Area: 0.0 m</p>
                 <p id = "pressure">BABY SHARK DOO DOO DOO DOO DOO DOO</p>
+                <p id = "collisions">Number of collisions: 0</p>
+                <p id = "impulse-per-collision">Impulse per collision: n/a</p>
                 <button id="add-molecule">Add molecule</button>
                 <button id="remove-molecule">Remove molecule</button>
                 <p id = "molecule-count">Number of molecules: 0</p>
-                
-                <label for="height-slider">Container height</label>
-                <input
-                    id="height-slider"
-                    type="range"
-                    min="-1"
-                    max="1"
-                    step="0.01"
-                    value="0"
-                >
-                <span id="height-scale">1.00x</span>
             <canvas id = "velocity-graph"></canvas>
             </div>
         </div>

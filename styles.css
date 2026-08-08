@@ -17,6 +17,9 @@
 
 #control-panel {
     flex: 3;
+    border: 3px solid black;
+    padding: 20px;
+    background-color: rgba(0, 255, 255, 0.25);
 }
 
 .simulation-controls {
@@ -30,4 +33,18 @@
     padding: 14px 24px;
     font-size: 2rem;
     cursor: pointer;
+}
+
+.state-controls {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 15px;
+}
+
+.state-control {
+    display: grid;
+    grid-template-columns: 140px 200px 80px 40px;
+    margin: 15px auto;
+    width: fit-content;
 }
