@@ -5,6 +5,7 @@ const areaDisplay = document.getElementById("area");
 const collisionDisplay = document.getElementById("collisions");
 const impulsePerCollisionDisplay = document.getElementById("impulse-per-collision");
 const pressureDisplay = document.getElementById("pressure");
+const theoreticalPressureDisplay = document.getElementById("theoretical-pressure");
 const moleculeCountDisplay = document.getElementById("molecule-count");
 
 const pausePlayButton = document.getElementById("pause-play-button");
@@ -25,16 +26,16 @@ canvas.height = canvas.clientHeight;
 const maxHeight = canvas.height;
 const startingHeight = canvas.height / maxHeightFactor;
 
-const heightSlider = document.getElementById("height-slider");
-const heightScaleDisplay = document.getElementById("height-scale");
+let targetTemp = 300;
 var heightFactor = 1;
-
-let curTemp = 300;
 
 const tempSlider = document.getElementById("temp-slider");
 const tempNumberInput = document.getElementById("temp-number-input");
 const moleSlider = document.getElementById("mole-slider");
 const moleNumberInput = document.getElementById("mole-number-input");
+const heightSlider = document.getElementById("height-slider");
+const heightScaleDisplay = document.getElementById("height-scale");
+const heightNumberInput = document.getElementById("height-number-input");
 
 const BOLTZMANN_CONSTANT = 1.380649e-23;
 const NITROGEN_MASS = 4.65e-26;
@@ -43,6 +44,8 @@ const AVAGADRO_NUMBER = 6.022e23;
 const SECONDS_PER_FRAME = 1e-5;
 const METERS_PER_PIXEL = 2.226e-3;
 const SECONDS_PER_WINDOW = 0.01;
+const SECONDS_PER_PV_WINDOW = 0.001;
+const NUM_REPRESENTING = AVAGADRO_NUMBER;
 
 const DEGREES_OF_FREEDOM = 2; //degrees of freedom
 
@@ -52,7 +55,7 @@ const collisionTimes = [];
 let collisionIndex = 0;
 
 class Ball {
-    constructor(x, y, radius = 10, fillColor = "black", vx = 1, vy = 1, vz = 1, mass = 1, num = AVAGADRO_NUMBER) {
+    constructor(x, y, radius = 10, fillColor = "black", vx = 1, vy = 1, vz = 1, mass = 1) {
         this.x = x;
         this.y = y;
         this.radius = radius;
@@ -61,8 +64,8 @@ class Ball {
         this.vy = vy;
         this.vz = vz;
         this.mass = mass;
-        this.num = num;
-        this.effMass = mass * num;
+        this.num = NUM_REPRESENTING;
+        this.effMass = mass * NUM_REPRESENTING;
     }
 }
 
@@ -71,14 +74,6 @@ function random(a, b) {
 }
 
 const molecules = [];
-let N = 0;
-
-document.getElementById("add-molecule")
-        .addEventListener("click", addMolecule);
-
-document.getElementById("remove-molecule")
-        .addEventListener("click", removeMolecule);
-
 
 function createMolecule() {
     let speed = calculateRMSFromTemp();
@@ -91,31 +86,38 @@ function createMolecule() {
                             speed * Math.sin(angle),
                             0,
                             NITROGEN_MASS,
-                            AVAGADRO_NUMBER
                         ));
-    N ++;
 }
 
-function addMolecule(num) {
-    for (let i = 0; i < num; i ++) {
-        createMolecule();
+function addOrRemoveMolecules(newN) {
+    const difference = newN - molecules.length;
+    if (difference > 0) {
+        for (let i = 0; i < difference; i ++) {
+            addMolecule();
+        }
+    }
+    else if (difference < 0) {
+        for (let i = 0; i < -difference; i ++) {
+            removeMolecule();
+        } 
     }
 }
 
-function removeMolecule(num) {
-    if (molecules.length - num <= 0) {
+function addMolecule() {
+    createMolecule();
+}
+
+function removeMolecule() {
+    if (molecules.length <= 1) {
         console.log("error, no more molecules to remove");
     }
     else {
-        for (let i = 0; i < num; i ++) {
-            let idx = Math.floor(random(0,N));
-            molecules.splice(idx,1);
-            N--;
-        }
-        /*tempRatio = calculateTemperature() / curTemp;
-        for (const b of molecules) {
-            changeSpeedToMatchTemp(b,tempRatio);
-        }*/
+        let idx = Math.floor(random(0,molecules.length));
+        molecules.splice(idx,1);
+    }
+    tempRatio = targetTemp / calculateTemperature();
+    for (const b of molecules) {
+        changeSpeedToMatchTemp(b,tempRatio);
     }
 }
 
@@ -128,10 +130,9 @@ function initialize() {
 }
 
 function update() {
-
-    const temperature = curTemp;
+    const currentTemp = calculateTemperature();
     temperatureDisplay.textContent = 
-        `Temperature: ${temperature.toFixed(1)} K`;
+        `Temperature: ${currentTemp.toPrecision(2)} K`;
 
     const area = getArea();
     areaDisplay.textContent = 
@@ -141,21 +142,27 @@ function update() {
     pressureDisplay.textContent =
         `Pressure: ${pressure.toPrecision(3)} Pa`;
     
+    const theoreticalPressure = getTheoreticalPressure();
+    theoreticalPressureDisplay.textContent = 
+        `Theoretical Pressure: ${theoreticalPressure.toPrecision(3)}`;
+
     moleculeCountDisplay.textContent =
-        `Molecule Count: ${N}`;
+        `Molecule Count: ${molecules.length}`;
 
     collisionDisplay.textContent =
-        `Number of collisions per second: ${numCollisions / SECONDS_PER_WINDOW}`;
+        `Number of collisions per second: ${(numCollisions / Math.min(curTime,SECONDS_PER_WINDOW)).toFixed(2)}`;
 
     impulsePerCollisionDisplay.textContent =
-        `Impulse per collision: ${totalImpulse / numCollisions}`;
+        `Impulse per collision: ${(totalImpulse / numCollisions).toFixed(2)}`;
     if (isPaused) {
         requestAnimationFrame(update);
         return;
     }
-
+    const oldTime = curTime;
     curTime += getSimulationSpeed();
-
+    if (Math.floor(oldTime / SECONDS_PER_PV_WINDOW) != Math.floor(curTime / SECONDS_PER_PV_WINDOW)) {
+        updatePVDiagram();
+    }
     //Remove collisions
     while (collisionTimes.length > collisionIndex && 
         collisionTimes[collisionIndex].curTime < curTime - SECONDS_PER_WINDOW) {
@@ -202,11 +209,11 @@ function calculateTemperature() {
         totalKE += 1/2 * ball.mass * getSpeed(ball) ** 2;
     }
 
-    return totalKE * 2 / (DEGREES_OF_FREEDOM * N * BOLTZMANN_CONSTANT);
+    return totalKE * 2 / (DEGREES_OF_FREEDOM * molecules.length * BOLTZMANN_CONSTANT);
 }
 
 function calculateRMSFromTemp() {
-    return Math.sqrt(DEGREES_OF_FREEDOM * BOLTZMANN_CONSTANT * curTemp / NITROGEN_MASS);
+    return Math.sqrt(DEGREES_OF_FREEDOM * BOLTZMANN_CONSTANT * targetTemp / NITROGEN_MASS);
 }
 
 function changeSpeedToMatchTemp(ball, tempRatio) {
@@ -318,21 +325,25 @@ function updateBallBallCollision(ball1, ball2) {
 }
 
 function getPerimeter() {
-    return 2 * (canvas.height * METERS_PER_PIXEL) + 
+    return 2 * (getHeight() * METERS_PER_PIXEL) + 
            2 * (canvas.width * METERS_PER_PIXEL);
 }
 
 function getPressure() {
-    return totalImpulse / (SECONDS_PER_WINDOW * getPerimeter());
+    return totalImpulse / (Math.min(curTime, SECONDS_PER_WINDOW) * getPerimeter());
 }
 
-function getRMSSpeed(intervals,) {
+function getTheoreticalPressure() {
+    return (molecules.length * NUM_REPRESENTING * BOLTZMANN_CONSTANT * targetTemp) / getArea();
+}
+
+function getRMSSpeed() {
     //return Math.sqrt(DEGREES_OF_FREEDOM * BOLTZMANN_CONSTANT * calculateTemperature() / molecule[0].mass);
     var sumSquares = 0;
     for (const ball of molecules) {
         sumSquares += getSpeed(ball) ** 2;
     }
-    return Math.sqrt(sumSquares / N);
+    return Math.sqrt(sumSquares / molecules.length);
 }
 
 function getBin(val, intervalSize = 10, intervalCount = 100) {
@@ -340,10 +351,11 @@ function getBin(val, intervalSize = 10, intervalCount = 100) {
                     Math.floor(val / intervalSize));
 }
 
-const graphCanvas = document.getElementById("velocity-graph");
+const speedGraphCanvas = document.getElementById("velocity-graph");
 
-graphCanvas.width = graphCanvas.clientWidth;
-graphCanvas.height = graphCanvas.clientHeight;
+speedGraphCanvas.width = speedGraphCanvas.clientWidth;
+speedGraphCanvas.height = speedGraphCanvas.clientHeight;
+
 
 function getSpeedCountsAndLabels(intervalSize = 10, intervalCount = 100) {
     const bins = new Array(intervalCount+1).fill(0);
@@ -364,8 +376,8 @@ function getSpeedCountsAndLabels(intervalSize = 10, intervalCount = 100) {
 }
 
 function createSpeedGraph(intervalSize = 10, intervalCount = 100) {
-    const {bins: speedCounts, labels: xAxisLabels} = getSpeedCountsAndLabels();
-    return new Chart(graphCanvas, {
+    const {bins: speedCounts, labels: xAxisLabels} = getSpeedCountsAndLabels(intervalSize, intervalCount);
+    return new Chart(speedGraphCanvas, {
         type: "bar",
         data: {
             labels: xAxisLabels,
@@ -434,12 +446,45 @@ function updateSpeedChart() {
     speedChart.data.datasets[0].data = speedCounts;
     speedChart.data.labels = xAxisLabels;
     speedChart.options.plugins.annotation.
-               annotations.rmsLine.value = getBin(getRMSSpeed());
+               annotations.rmsLine.value = getBin(calculateRMSFromTemp());
     speedChart.options.plugins.annotation.
                annotations.rmsLine.label.content = 
                     `RMS: ${getRMSSpeed().toFixed(1)} m/s`
     speedChart.update();
 }
+
+const PVDiagramCanvas = document.getElementById("PV-diagram");
+PVDiagramCanvas.height = PVDiagramCanvas.clientHeight;
+PVDiagramCanvas.width = PVDiagramCanvas.clientWidth;
+const PVData = [];
+
+function createPVDiagram() {
+    return chart = new Chart(PVDiagramCanvas, {
+        type: "scatter",
+
+        data: {
+            datasets: [
+                {
+                    label: "Measurements",
+
+                    data: PVData
+                }
+            ]
+        }
+    })
+}
+
+function updatePVDiagram() {
+    PVDiagram.data.datasets[0].data.push(
+        {
+            x: getArea(),
+            y: getTheoreticalPressure()
+        }
+    );
+    PVDiagram.update();
+}
+
+PVDiagram = createPVDiagram();
 
 function getHeight() {
     return heightFactor * startingHeight;
@@ -465,51 +510,44 @@ function drawContainer() {
 
 heightSlider.addEventListener("input", function () {
     heightFactor = 2 ** Number(heightSlider.value);
-    heightScaleDisplay.textContent = 
-        `${heightFactor.toFixed(2)}x`;
-    }
-);
+    heightNumberInput.value = heightFactor.toFixed(2);
+});
+
+heightNumberInput.addEventListener("change", function () {
+    heightFactor = Number(heightNumberInput.value);
+    heightSlider.value = Math.log2(heightFactor);
+})
 
 moleSlider.addEventListener("input", function () {
     newN = Number(moleSlider.value);
-    if (newN > N) {
-        addMolecule(newN-N);
-    }
-    else if (N > newN) {
-        removeMolecule(N-newN);
-    }
-    N = newN;
-    moleNumberInput.value = N;
+    addOrRemoveMolecules(newN);
+    moleNumberInput.value = molecules.length;
 });
 
 
 
 moleNumberInput.addEventListener("change", function () {
     newN = Number(moleNumberInput.value);
-    if (newN > N) {
-        addMolecule(newN-N);
-    }
-    else if (N > newN) {
-        removeMolecule(N-newN);
-    }
-    N = newN;
-    moleSlider.value = N;
+    addOrRemoveMolecules(newN);
+    moleSlider.value = molecules.length;
 })
 
 tempSlider.addEventListener("input", function () {
-    newTemp = Number(tempSlider.value);
+    const oldTemp = targetTemp;
+    targetTemp = Number(tempSlider.value);
     for (const b of molecules) {
-        changeSpeedToMatchTemp(b, newTemp / curTemp);
+        changeSpeedToMatchTemp(b, targetTemp / oldTemp);
     }
-    tempNumberInput.value = newTemp;
+    tempNumberInput.value = targetTemp;
 });
 
 tempNumberInput.addEventListener("change", function () {
-    newTemp = Number(tempNumberInput.value);
+    const oldTemp = targetTemp;
+    targetTemp = Number(tempNumberInput.value);
     for (const b of molecules) {
-        changeSpeedToMatchTemp(b, newTemp / oldTemp);
+        changeSpeedToMatchTemp(b, targetTemp / oldTemp);
     }
-    tempSlider.value = newTemp;
+    tempSlider.value = targetTemp;
 })
 
 pausePlayButton.addEventListener("click", function () {
