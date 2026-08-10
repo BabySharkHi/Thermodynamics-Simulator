@@ -84,7 +84,35 @@
                 <p id = "impulse-per-collision">Impulse per collision: n/a</p>
                 <p id = "molecule-count">Number of molecules: 0</p>
             <canvas id = "velocity-graph"></canvas>
+            <div class = "graph-options">
+                <label>
+                    <input
+                        type = "checkbox"
+                        id = "show-rms"
+                        checked
+                    >
+                </label>
+
+                <label>
+                    <input type="checkbox"
+                        id = "show-mean"
+                        checked
+                    >
+                </label>
+                
+                <label>
+                    <input type="checkbox"
+                        id = "show-mode"
+                        checked
+                    >
+                </label>
+            </div>
+            <canvas id = "pressure-chart"></canvas>
             <canvas id = "PV-diagram"></canvas>
+            <div class = "PV-diagram-controls">
+                <button id = "PV-pause-play">▶️</button>
+                <button id = "PV-clear">⏹️</button>
+            </div>
             </div>
         </div>
         <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>

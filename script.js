@@ -11,6 +11,13 @@ const moleculeCountDisplay = document.getElementById("molecule-count");
 const pausePlayButton = document.getElementById("pause-play-button");
 let isPaused = true;
 
+const PVPausePlayButton = document.getElementById("PV-pause-play");
+const PVClearButton = document.getElementById("PV-clear");
+let PVPaused = true;
+const showRMS = document.getElementById("show-rms");
+const showMean = document.getElementById("show-mean");
+const showMode = document.getElementById("show-mode");
+
 let curTime = 0.0;
 const simSpeedButton = document.getElementById("sim-speed-button");
 const simSpeedFactors = [0.1,0.2,0.5,1,2,5,10];
@@ -346,6 +353,27 @@ function getRMSSpeed() {
     return Math.sqrt(sumSquares / molecules.length);
 }
 
+function getMeanSpeed() {
+    var sum = 0;
+    for (const ball of molecules) {
+        sum += getSpeed(ball);
+    }
+    return sum / molecules.length;
+}
+
+function getModeBin(intervalSize = 10, intervalCount = 100) {
+    const {bins, labels} = getSpeedCountsAndLabels(intervalSize, intervalCount);
+    let maxVal = 0;
+    let maxBin = 0;
+    for (let i = 0; i < bins.length; i ++) {
+        if (bins[i] > maxVal) {
+            maxBin = i;
+            maxVal = bins[i];
+        }
+    }
+    return maxBin;
+}
+
 function getBin(val, intervalSize = 10, intervalCount = 100) {
     return Math.min(intervalCount, 
                     Math.floor(val / intervalSize));
@@ -367,8 +395,9 @@ function getSpeedCountsAndLabels(intervalSize = 10, intervalCount = 100) {
     labels[intervalCount] = `>=${intervalSize * intervalCount}`;
 
     for (const ball of molecules) {
-        let idx = Math.floor(getSpeed(ball) / intervalSize);
-        idx = Math.min(idx, intervalCount);
+        //let idx = Math.floor(getSpeed(ball) / intervalSize);
+        //idx = Math.min(idx, intervalCount);
+        let idx = getBin(getSpeed(ball), intervalSize, intervalCount);
         bins[idx] ++;
     }
 
@@ -412,7 +441,33 @@ function createSpeedGraph(intervalSize = 10, intervalCount = 100) {
 
                             label: {
                                 display: true,
-                                content: "RMS speed"
+                                content: "",
+                                position: "center"
+                            }
+                        },
+
+                        arithmeticMeanLine: {
+                            type: "line",
+                            scaleID: "x",
+                            value: 0,
+                            borderWidth: 2,
+
+                            label: {
+                                display: true,
+                                content: "",
+                                position: "start"
+                            }
+                        },
+
+                        modeLine: {
+                            type: "line",
+                            scaleID: "x",
+                            value: 0,
+                            borderWidth:2,
+                            label: {
+                                display: true,
+                                content: "Mode",
+                                position: "end"
                             }
                         }
                     }
@@ -450,8 +505,43 @@ function updateSpeedChart() {
     speedChart.options.plugins.annotation.
                annotations.rmsLine.label.content = 
                     `RMS: ${getRMSSpeed().toFixed(1)} m/s`
+    speedChart.options.plugins.annotation.
+               annotations.arithmeticMeanLine.value = getBin(getMeanSpeed());
+    speedChart.options.plugins.annotation.
+               annotations.arithmeticMeanLine.label.content = 
+                    `Mean: ${getMeanSpeed().toFixed(1)} m/s`
+    speedChart.options.plugins.annotation.
+            annotations.modeLine.value = getModeBin();
     speedChart.update();
 }
+
+const pressureChartCanvas = document.getElementById("pressure-chart");
+pressureChartCanvas.height = pressureChartCanvas.clientHeight;
+pressureChartCanvas.width = pressureChartCanvas.clientWidth;
+
+function createPressureChart() {
+    return chart = new Chart(pressureChartCanvas, {
+        type: "scatter",
+        data: {
+            datasets: [
+                {
+                    data: [
+                    {x:3, y:4},
+                    {x:6,y:3},
+                    {x:10,y:6},
+                    {x:1,y:7}
+                    ]
+                }
+            ]
+        }
+    })
+}
+
+function updatePressureChart() {
+
+}
+
+pressureChart = createPressureChart();
 
 const PVDiagramCanvas = document.getElementById("PV-diagram");
 PVDiagramCanvas.height = PVDiagramCanvas.clientHeight;
@@ -466,23 +556,73 @@ function createPVDiagram() {
             datasets: [
                 {
                     label: "Measurements",
-
-                    data: PVData
+                    data: PVData,
+                    showLine: true,
+                    borderColor: "red",
+                    borderWidth: 2,
+                    pointRadius: 1,
+                    tension: 0
+                },
+                {
+                    label: "Current",
+                    pointbackgroundcolor: "dark blue",
+                    data: [],
+                    showLine: false,
+                    pointRadius: 4
                 }
             ]
+        },
+        options: {
+            scales: {
+                x: {
+                    beginAtZero: true,
+                    title: {
+                        display: true,
+                        text: "Area (m²)"
+                    }
+                },
+                y: {
+                    beginAtZero: true,
+                    title: {
+                        display: true,
+                        text: "Pressure (Pa)"
+                    }
+                }
+            }
         }
     })
 }
 
 function updatePVDiagram() {
-    PVDiagram.data.datasets[0].data.push(
+    if (!PVPaused) {
+        PVData.push(
         {
             x: getArea(),
             y: getTheoreticalPressure()
-        }
-    );
-    PVDiagram.update();
+        });
+        PVDiagram.data.datasets[1].data = [
+            PVData[PVData.length-1]
+        ];
+        PVDiagram.update();
+    }
 }
+
+PVPausePlayButton.addEventListener("click", function () {
+    PVPaused = !PVPaused;
+    if (PVPaused) {
+        PVPausePlayButton.textContent = "▶️";
+    }
+    else {
+        PVPausePlayButton.textContent = "⏸️";
+    }
+});
+
+PVClearButton.addEventListener("click", function () {
+    PVData.length = 0;
+    PVDiagram.update();
+    PVPaused = true;
+    PVPausePlayButton.textContent = "▶️";
+})
 
 PVDiagram = createPVDiagram();
 
@@ -511,25 +651,27 @@ function drawContainer() {
 heightSlider.addEventListener("input", function () {
     heightFactor = 2 ** Number(heightSlider.value);
     heightNumberInput.value = heightFactor.toFixed(2);
+    updatePVDiagram();
 });
 
 heightNumberInput.addEventListener("change", function () {
     heightFactor = Number(heightNumberInput.value);
     heightSlider.value = Math.log2(heightFactor);
+    updatePVDiagram();
 })
 
 moleSlider.addEventListener("input", function () {
     newN = Number(moleSlider.value);
     addOrRemoveMolecules(newN);
     moleNumberInput.value = molecules.length;
+    updatePVDiagram();
 });
-
-
 
 moleNumberInput.addEventListener("change", function () {
     newN = Number(moleNumberInput.value);
     addOrRemoveMolecules(newN);
     moleSlider.value = molecules.length;
+    updatePVDiagram();
 })
 
 tempSlider.addEventListener("input", function () {
@@ -539,6 +681,7 @@ tempSlider.addEventListener("input", function () {
         changeSpeedToMatchTemp(b, targetTemp / oldTemp);
     }
     tempNumberInput.value = targetTemp;
+    updatePVDiagram();
 });
 
 tempNumberInput.addEventListener("change", function () {
@@ -548,6 +691,7 @@ tempNumberInput.addEventListener("change", function () {
         changeSpeedToMatchTemp(b, targetTemp / oldTemp);
     }
     tempSlider.value = targetTemp;
+    updatePVDiagram();
 })
 
 pausePlayButton.addEventListener("click", function () {
