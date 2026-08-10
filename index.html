@@ -39,17 +39,19 @@
                         <input
                             id="mole-slider"
                             type="range"
-                            min="1"
-                            max="2000"
-                            value="200"
+                            min="0.01"
+                            max="20"
+                            value="2"
+                            step="0.01"
                         >
 
                         <input
                             id="mole-number-input"
                             type="number"
-                            min="1"
-                            max="2000"
-                            value="200"
+                            min="0.01"
+                            max="20"
+                            value="2"
+                            step="0.01"
                         >
                         <span> mol</span>
                     </div>
@@ -75,14 +77,9 @@
                         <span> x</span>
                     </div>
                 </div>
-                
-                <p id ="temperature">Temperature: 0 K</p>
-                <p id = "area">Area: 0.0 m</p>
-                <p id = "pressure">BABY SHARK DOO DOO DOO DOO DOO DOO</p>
-                <p id = "theoretical-pressure">YUMMY</p>
                 <p id = "collisions">Number of collisions: 0</p>
                 <p id = "impulse-per-collision">Impulse per collision: n/a</p>
-                <p id = "molecule-count">Number of molecules: 0</p>
+                <p id = "pressure-equation">thoeutn</p>
             <canvas id = "velocity-graph"></canvas>
             <div class = "graph-options">
                 <label>
@@ -117,7 +114,7 @@
         </div>
         <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
         <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-annotation"></script>
+        <script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
         <script src = "script.js"></script>
-
     </body>
 </html>

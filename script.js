@@ -1,12 +1,8 @@
 const canvas = document.getElementById("container");
 const ctx = canvas.getContext("2d");
-const temperatureDisplay = document.getElementById("temperature");
-const areaDisplay = document.getElementById("area");
 const collisionDisplay = document.getElementById("collisions");
 const impulsePerCollisionDisplay = document.getElementById("impulse-per-collision");
-const pressureDisplay = document.getElementById("pressure");
-const theoreticalPressureDisplay = document.getElementById("theoretical-pressure");
-const moleculeCountDisplay = document.getElementById("molecule-count");
+const pressureEquationDisplay = document.getElementById("pressure-equation");
 
 const pausePlayButton = document.getElementById("pause-play-button");
 let isPaused = true;
@@ -49,10 +45,12 @@ const NITROGEN_MASS = 4.65e-26;
 const AVAGADRO_NUMBER = 6.022e23;
 
 const SECONDS_PER_FRAME = 1e-5;
-const METERS_PER_PIXEL = 2.226e-3;
-const SECONDS_PER_WINDOW = 0.01;
-const SECONDS_PER_PV_WINDOW = 0.001;
-const NUM_REPRESENTING = AVAGADRO_NUMBER;
+const METERS_PER_PIXEL = 1e-3;
+const SECONDS_PER_WINDOW = 0.001;
+const SECONDS_PER_DISPLAY_WINDOW = 0.01;
+const SECONDS_PER_PRESSURE_WINDOW = 5e-5;
+const SECONDS_PER_PV_WINDOW = 0.005;
+const NUM_REPRESENTING = AVAGADRO_NUMBER / 100;
 
 const DEGREES_OF_FREEDOM = 2; //degrees of freedom
 
@@ -74,7 +72,24 @@ class Ball {
         this.num = NUM_REPRESENTING;
         this.effMass = mass * NUM_REPRESENTING;
     }
+
+    getSpeed() {
+        return Math.sqrt(this.vx**2 + this.vy**2 + this.vz**2);
+    }
+
+    drawBall() {
+        ctx.beginPath();
+        ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
+        ctx.fillStyle = this.fillColor;
+        ctx.fill();
+    }
+    
+    move() {
+        this.x += this.vx * getSimulationSpeed() / METERS_PER_PIXEL;
+        this.y += this.vy * getSimulationSpeed() / METERS_PER_PIXEL;
+    }
 }
+
 
 function random(a, b) {
     return Math.random() * (b-a) + a;
@@ -132,35 +147,18 @@ function initialize() {
     for (let i = 0; i < STARTING_MOLECULES; i ++) {
         createMolecule();
     }
-
+    updatePressureEquation();
     update();
 }
 
 function update() {
-    const currentTemp = calculateTemperature();
-    temperatureDisplay.textContent = 
-        `Temperature: ${currentTemp.toPrecision(2)} K`;
-
-    const area = getArea();
-    areaDisplay.textContent = 
-        `Area: ${area.toPrecision(3)} m^2`;
-    
-    const pressure = getPressure();
-    pressureDisplay.textContent =
-        `Pressure: ${pressure.toPrecision(3)} Pa`;
-    
-    const theoreticalPressure = getTheoreticalPressure();
-    theoreticalPressureDisplay.textContent = 
-        `Theoretical Pressure: ${theoreticalPressure.toPrecision(3)}`;
-
-    moleculeCountDisplay.textContent =
-        `Molecule Count: ${molecules.length}`;
-
     collisionDisplay.textContent =
         `Number of collisions per second: ${(numCollisions / Math.min(curTime,SECONDS_PER_WINDOW)).toFixed(2)}`;
 
     impulsePerCollisionDisplay.textContent =
         `Impulse per collision: ${(totalImpulse / numCollisions).toFixed(2)}`;
+    
+
     if (isPaused) {
         requestAnimationFrame(update);
         return;
@@ -184,9 +182,10 @@ function update() {
     }
 
     ctx.clearRect(0,0,canvas.width, canvas.height);
-    for (const b of molecules) {
-        drawBall(b);
-        updateBall(b);
+    for (const ball of molecules) {
+        ball.move();
+        updateWallCollision(ball);
+        ball.drawBall();
     }
     
     drawContainer();
@@ -197,13 +196,16 @@ function update() {
         }
     }
 
+    //Add and remove old pressure data
+    if (curTime >= 10 * SECONDS_PER_PRESSURE_WINDOW && 
+        Math.floor(curTime / SECONDS_PER_PRESSURE_WINDOW) != 
+        Math.floor(oldTime / SECONDS_PER_PRESSURE_WINDOW)) {
+            updatePressureChart();
+        }
+
     updateSpeedChart();
 
     requestAnimationFrame(update);
-}
-
-function getSpeed(ball) {
-    return Math.sqrt(ball.vx**2 + ball.vy**2 + ball.vz**2);
 }
 
 function getArea() {
@@ -213,7 +215,7 @@ function getArea() {
 function calculateTemperature() {
     let totalKE = 0;
     for (const ball of molecules) {
-        totalKE += 1/2 * ball.mass * getSpeed(ball) ** 2;
+        totalKE += 1/2 * ball.mass * ball.getSpeed() ** 2;
     }
 
     return totalKE * 2 / (DEGREES_OF_FREEDOM * molecules.length * BOLTZMANN_CONSTANT);
@@ -229,21 +231,8 @@ function changeSpeedToMatchTemp(ball, tempRatio) {
     ball.vz *= Math.sqrt(tempRatio);
 }
 
-function drawBall(ball) {
-    ctx.beginPath();
-    ctx.arc(ball.x, ball.y, ball.radius, 0, Math.PI * 2);
-    ctx.fillStyle = ball.fillColor;
-    ctx.fill();
-}
-
 function distance(x1,y1,x2,y2) {
     return Math.sqrt((x1-x2)**2 + (y1-y2)**2);
-}
-
-function updateBall(ball) {
-    ball.x += ball.vx * getSimulationSpeed() / METERS_PER_PIXEL;
-    ball.y += ball.vy * getSimulationSpeed() / METERS_PER_PIXEL;
-    updateWallCollision(ball);
 }
 
 function updateWallCollision(ball) {
@@ -331,6 +320,20 @@ function updateBallBallCollision(ball1, ball2) {
     ball2.vy += (impulse / ball2.mass) * ny;
 }
 
+async function updatePressureEquation() {
+    const T = calculateTemperature();
+    const A = getArea();
+    const R = BOLTZMANN_CONSTANT * AVAGADRO_NUMBER;
+    const n = getMoles();
+    const P = getTheoreticalPressure();
+    MathJax.typesetClear([pressureEquationDisplay]);
+    pressureEquationDisplay.textContent = String.raw`
+    \(P = \frac{nRT}{A}
+        = \frac{(${n.toFixed(2)}\ \mathrm{mol})(${R.toFixed(2)})(${T.toFixed(2)}\ \mathrm{K})}{${A.toFixed(2)}\ \mathrm{m^2}}
+        = ${P.toPrecision(3)}\ \mathrm{Pa}\)`;
+    await MathJax.typesetPromise([pressureEquationDisplay]);
+}
+
 function getPerimeter() {
     return 2 * (getHeight() * METERS_PER_PIXEL) + 
            2 * (canvas.width * METERS_PER_PIXEL);
@@ -344,11 +347,19 @@ function getTheoreticalPressure() {
     return (molecules.length * NUM_REPRESENTING * BOLTZMANN_CONSTANT * targetTemp) / getArea();
 }
 
+function getMoles() {
+    numMolecules = 0;
+    for (const ball of molecules) {
+        numMolecules += ball.num;
+    }
+    return numMolecules / AVAGADRO_NUMBER;
+}
+
 function getRMSSpeed() {
     //return Math.sqrt(DEGREES_OF_FREEDOM * BOLTZMANN_CONSTANT * calculateTemperature() / molecule[0].mass);
     var sumSquares = 0;
     for (const ball of molecules) {
-        sumSquares += getSpeed(ball) ** 2;
+        sumSquares += ball.getSpeed() ** 2;
     }
     return Math.sqrt(sumSquares / molecules.length);
 }
@@ -356,7 +367,7 @@ function getRMSSpeed() {
 function getMeanSpeed() {
     var sum = 0;
     for (const ball of molecules) {
-        sum += getSpeed(ball);
+        sum += ball.getSpeed();
     }
     return sum / molecules.length;
 }
@@ -397,7 +408,7 @@ function getSpeedCountsAndLabels(intervalSize = 10, intervalCount = 100) {
     for (const ball of molecules) {
         //let idx = Math.floor(getSpeed(ball) / intervalSize);
         //idx = Math.min(idx, intervalCount);
-        let idx = getBin(getSpeed(ball), intervalSize, intervalCount);
+        let idx = getBin(ball.getSpeed(), intervalSize, intervalCount);
         bins[idx] ++;
     }
 
@@ -519,26 +530,70 @@ const pressureChartCanvas = document.getElementById("pressure-chart");
 pressureChartCanvas.height = pressureChartCanvas.clientHeight;
 pressureChartCanvas.width = pressureChartCanvas.clientWidth;
 
+pressureData = [];
+
 function createPressureChart() {
     return chart = new Chart(pressureChartCanvas, {
         type: "scatter",
         data: {
             datasets: [
                 {
-                    data: [
-                    {x:3, y:4},
-                    {x:6,y:3},
-                    {x:10,y:6},
-                    {x:1,y:7}
-                    ]
+                    label: "Measurements",
+                    data: [],
+                    showLine: true,
+                    beginAtZero: true
                 }
             ]
+        },
+
+        options: {
+            scales: {
+                x: {
+                    beginAtZero: true,
+                    max: SECONDS_PER_DISPLAY_WINDOW / SECONDS_PER_PRESSURE_WINDOW,
+                    title: {
+                        display: true,
+                        text: "Pressure windows"
+                    }
+                },
+                y: {
+                    beginAtZero: true,
+                    title: {
+                        display: true,
+                        text: "Pressure (Pa)"
+                    }
+                }
+            },
+            plugins: {
+                annotation: {
+                    annotations: {
+                        theoreticalPressureLine: {
+                            type: "line",
+                            scaleID: "y",
+                            value: 0,
+                            borderWidth: 2
+                        }
+                    }
+                }
+            }
         }
-    })
+    });
 }
 
 function updatePressureChart() {
-
+    pressureData.push(getPressure());
+    if (pressureData.length >= SECONDS_PER_DISPLAY_WINDOW / SECONDS_PER_PRESSURE_WINDOW) {
+        pressureData.splice(0,1);
+    }
+    pressureChart.data.datasets[0].data = 
+        pressureData.map((value, index) => ({
+            x: index,
+            y: value
+        }));
+    theoreticalPressure = getTheoreticalPressure();
+    pressureChart.options.plugins.annotation.annotations.
+                  theoreticalPressureLine.value = theoreticalPressure;
+    pressureChart.update("none");
 }
 
 pressureChart = createPressureChart();
@@ -652,26 +707,30 @@ heightSlider.addEventListener("input", function () {
     heightFactor = 2 ** Number(heightSlider.value);
     heightNumberInput.value = heightFactor.toFixed(2);
     updatePVDiagram();
+    updatePressureEquation();
 });
 
 heightNumberInput.addEventListener("change", function () {
     heightFactor = Number(heightNumberInput.value);
     heightSlider.value = Math.log2(heightFactor);
     updatePVDiagram();
+    updatePressureEquation();
 })
 
 moleSlider.addEventListener("input", function () {
-    newN = Number(moleSlider.value);
+    newN = 100 * Number(moleSlider.value);
     addOrRemoveMolecules(newN);
-    moleNumberInput.value = molecules.length;
+    moleNumberInput.value = newN / 100;
     updatePVDiagram();
+    updatePressureEquation();
 });
 
 moleNumberInput.addEventListener("change", function () {
-    newN = Number(moleNumberInput.value);
+    newN = 100 * Number(moleNumberInput.value);
     addOrRemoveMolecules(newN);
-    moleSlider.value = molecules.length;
+    moleSlider.value = newN / 100;
     updatePVDiagram();
+    updatePressureEquation();
 })
 
 tempSlider.addEventListener("input", function () {
@@ -682,6 +741,7 @@ tempSlider.addEventListener("input", function () {
     }
     tempNumberInput.value = targetTemp;
     updatePVDiagram();
+    updatePressureEquation();
 });
 
 tempNumberInput.addEventListener("change", function () {
@@ -692,6 +752,7 @@ tempNumberInput.addEventListener("change", function () {
     }
     tempSlider.value = targetTemp;
     updatePVDiagram();
+    updatePressureEquation();
 })
 
 pausePlayButton.addEventListener("click", function () {
@@ -714,6 +775,6 @@ simSpeedButton.addEventListener("click", function () {
     simSpeedButton.textContent = `${simSpeedFactor}x`;
     simSpeedDisplay.textContent = 
         `1 frame = ${getSimulationSpeed().toPrecision(1)} seconds`;
-})
+});
 
 initialize();
