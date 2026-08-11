@@ -7,6 +7,10 @@
         <div id = "main-layout">
             <div id = "simulation-panel">
                 <canvas id = "container"></canvas> 
+                <div id = "heat-controls">
+                    <img id = "fire" src="fire.png" alt="Heat">
+                    <img id = "ice" scr="ice.png" alt="Cool">
+                </div>
                 <div class = "simulation-controls">
                     <button id = "pause-play-button">▶️</button>
                     <button id = "sim-speed-button">1x</button>
@@ -24,7 +28,7 @@
                             max="1000"
                             value="300"
                         >
-                        
+
                         <input
                             id="temp-number-input"
                             type="number"
@@ -57,9 +61,9 @@
                     </div>
                 
                     <div class="state-control">
-                        <label for="height-slider">Container height</label>
+                        <label for="width-slider">Container width</label>
                         <input
-                            id="height-slider"
+                            id="width-slider"
                             type="range"
                             min="-1"
                             max="1"
@@ -67,7 +71,7 @@
                             value="0"
                         >
                         <input
-                            id="height-number-input"
+                            id="width-number-input"
                             type="number"
                             min="0.5"
                             max="2"
@@ -80,37 +84,67 @@
                 <p id = "collisions">Number of collisions: 0</p>
                 <p id = "impulse-per-collision">Impulse per collision: n/a</p>
                 <p id = "pressure-equation">thoeutn</p>
-            <canvas id = "velocity-graph"></canvas>
-            <div class = "graph-options">
-                <label>
-                    <input
-                        type = "checkbox"
-                        id = "show-rms"
-                        checked
-                    >
-                </label>
+            </div>
+        </div>
+        <div id = "graphs-panel">
+            <section class = "graph-section">
+                <button class="graph-toggle"
+                        data-controls="velocity-graph-content">
+                    <span>Show Velocity Distribution</span>
+                    <span class="toggle-icon">+</span>
+                </button>
+                <div id = "velocity-graph-content">
+                    <canvas id = "velocity-graph"></canvas>
+                    <div class = "graph-options">
+                        <label>
+                            <input
+                                type = "checkbox"
+                                id = "show-rms"
+                                checked
+                            >
+                        </label>
 
-                <label>
-                    <input type="checkbox"
-                        id = "show-mean"
-                        checked
-                    >
-                </label>
-                
-                <label>
-                    <input type="checkbox"
-                        id = "show-mode"
-                        checked
-                    >
-                </label>
-            </div>
-            <canvas id = "pressure-chart"></canvas>
-            <canvas id = "PV-diagram"></canvas>
-            <div class = "PV-diagram-controls">
-                <button id = "PV-pause-play">▶️</button>
-                <button id = "PV-clear">⏹️</button>
-            </div>
-            </div>
+                        <label>
+                            <input type="checkbox"
+                                id = "show-mean"
+                                checked
+                            >
+                        </label>
+
+                        <label>
+                            <input type="checkbox"
+                                id = "show-mode"
+                                checked
+                            >
+                        </label>
+                    </div>
+                </div>
+            </section>
+            <section class="graph-section">
+                <button class="graph-toggle"
+                        data-controls="pressure-graph-content"
+                >
+                    <span>Show Pressure History</span>
+                    <span class="toggle-icon">+</span>
+                </button>
+                <div id="pressure-graph-content">
+                    <canvas id = "pressure-chart"></canvas>
+                </div>
+            </section>
+            <section class="graph-section">
+                <button class="graph-toggle"
+                        data-controls="PV-diagram-content">
+                    <span>Show PV Diagram</span>
+                    <span class="toggle-icon">+</span>
+                </button>
+                <div id = "PV-diagram-content">
+                    <canvas id = "PV-diagram"></canvas>
+                    <div class = "PV-diagram-controls">
+                        <button id = "PV-pause-play">▶️</button>
+                        <button id = "PV-clear">⏹️</button>
+                    </div>
+                </div>
+            </section>
         </div>
         <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
         <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-annotation"></script>

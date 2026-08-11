@@ -23,33 +23,33 @@ const simSpeedDisplay = document.getElementById("sim-speed");
 
 const STARTING_MOLECULES = 200;
 
-const maxHeightFactor = 2.0;
+const maxWidthFactor = 2.0;
 canvas.width = canvas.clientWidth;
 canvas.height = canvas.clientHeight;
-const maxHeight = canvas.height;
-const startingHeight = canvas.height / maxHeightFactor;
+const maxWidth = canvas.width;
+const startingWidth = canvas.width / maxWidthFactor;
 
 let targetTemp = 300;
-var heightFactor = 1;
+var widthFactor = 1;
 
 const tempSlider = document.getElementById("temp-slider");
 const tempNumberInput = document.getElementById("temp-number-input");
 const moleSlider = document.getElementById("mole-slider");
 const moleNumberInput = document.getElementById("mole-number-input");
-const heightSlider = document.getElementById("height-slider");
-const heightScaleDisplay = document.getElementById("height-scale");
-const heightNumberInput = document.getElementById("height-number-input");
+const widthSlider = document.getElementById("width-slider");
+const widthScaleDisplay = document.getElementById("width-scale");
+const widthNumberInput = document.getElementById("width-number-input");
 
 const BOLTZMANN_CONSTANT = 1.380649e-23;
 const NITROGEN_MASS = 4.65e-26;
 const AVAGADRO_NUMBER = 6.022e23;
 
-const SECONDS_PER_FRAME = 1e-5;
-const METERS_PER_PIXEL = 1e-3;
-const SECONDS_PER_WINDOW = 0.001;
-const SECONDS_PER_DISPLAY_WINDOW = 0.01;
-const SECONDS_PER_PRESSURE_WINDOW = 5e-5;
-const SECONDS_PER_PV_WINDOW = 0.005;
+const SECONDS_PER_FRAME = 1e-6;
+const METERS_PER_PIXEL = 2.03e-4;
+const SECONDS_PER_WINDOW = 1e-4;
+const SECONDS_PER_DISPLAY_WINDOW = 1e-3;
+const SECONDS_PER_PRESSURE_WINDOW = 5e-6;
+const SECONDS_PER_PV_WINDOW = 5e-4;
 const NUM_REPRESENTING = AVAGADRO_NUMBER / 100;
 
 const DEGREES_OF_FREEDOM = 2; //degrees of freedom
@@ -100,7 +100,7 @@ const molecules = [];
 function createMolecule() {
     let speed = calculateRMSFromTemp();
     let angle = Math.random() * 2 * Math.PI;
-    molecules.push(new Ball(Math.random() * canvas.width,
+    molecules.push(new Ball(Math.random() * getWidth(),
                             Math.random() * canvas.height,
                             2,
                             "blue",
@@ -209,7 +209,7 @@ function update() {
 }
 
 function getArea() {
-    return (canvas.width * METERS_PER_PIXEL) * (getHeight() * METERS_PER_PIXEL); 
+    return (getWidth() * METERS_PER_PIXEL) * (canvas.height * METERS_PER_PIXEL);
 }
 
 function calculateTemperature() {
@@ -244,16 +244,16 @@ function updateWallCollision(ball) {
         numCollisions ++;
         collisionTimes.push({curTime, impulse});
     }
-    if (ball.x + ball.radius >= canvas.width) {
-        ball.x = ball.x - 2 * (ball.x + ball.radius - canvas.width);
+    if (ball.x + ball.radius >= getRightWall()) {
+        ball.x = ball.x - 2 * (ball.x + ball.radius - getRightWall());
         ball.vx = -ball.vx;
         let impulse = 2 * ball.effMass * Math.abs(ball.vx);
         totalImpulse += impulse;
         numCollisions ++;
         collisionTimes.push({curTime, impulse});
     }
-    if (ball.y - ball.radius <= getTopWall()) {
-        ball.y = ball.y - 2 * (ball.y - ball.radius - getTopWall());
+    if (ball.y - ball.radius <= 0) {
+        ball.y = ball.radius - (ball.y - ball.radius);
         ball.vy = -ball.vy;
         let impulse = 2 * ball.effMass * Math.abs(ball.vy);
         totalImpulse += impulse;
@@ -329,14 +329,14 @@ async function updatePressureEquation() {
     MathJax.typesetClear([pressureEquationDisplay]);
     pressureEquationDisplay.textContent = String.raw`
     \(P = \frac{nRT}{A}
-        = \frac{(${n.toFixed(2)}\ \mathrm{mol})(${R.toFixed(2)})(${T.toFixed(2)}\ \mathrm{K})}{${A.toFixed(2)}\ \mathrm{m^2}}
+        = \frac{(${n.toFixed(2)}\ \mathrm{mol})(${R.toFixed(2)})(${T.toFixed(2)}\ \mathrm{K})}{${A.toPrecision(2)}\ \mathrm{m^2}}
         = ${P.toPrecision(3)}\ \mathrm{Pa}\)`;
     await MathJax.typesetPromise([pressureEquationDisplay]);
 }
 
 function getPerimeter() {
-    return 2 * (getHeight() * METERS_PER_PIXEL) + 
-           2 * (canvas.width * METERS_PER_PIXEL);
+    return 2 * (canvas.height * METERS_PER_PIXEL) +
+           2 * (getWidth() * METERS_PER_PIXEL);
 }
 
 function getPressure() {
@@ -681,38 +681,48 @@ PVClearButton.addEventListener("click", function () {
 
 PVDiagram = createPVDiagram();
 
-function getHeight() {
-    return heightFactor * startingHeight;
+function getWidth() {
+    return widthFactor * startingWidth;
 }
 
-function getTopWall() {
-    return canvas.height - getHeight();
+function getRightWall() {
+    return getWidth();
 }
 
 function drawContainer() {
-    topWall = getTopWall();
+    rightWall = getRightWall();
     ctx.fillStyle = "white";
-    ctx.fillRect(0,0,canvas.width, topWall);
+    ctx.fillRect(rightWall,0,canvas.width-rightWall,canvas.height);
 
 
     ctx.beginPath();
-    ctx.moveTo(0, topWall);
-    ctx.lineTo(canvas.width, topWall)
+    ctx.moveTo(rightWall, 0);
+    ctx.lineTo(rightWall, canvas.height)
     ctx.lineWidth = 3;
     ctx.strokeStyle = "black";
     ctx.stroke();
 }
 
-heightSlider.addEventListener("input", function () {
-    heightFactor = 2 ** Number(heightSlider.value);
-    heightNumberInput.value = heightFactor.toFixed(2);
+document.querySelectorAll(".graph-toggle").forEach(button => {
+    button.addEventListener("click", () => {
+        const graphContent = document.getElementById(
+            button.dataset.controls);
+        graphContent.hidden = !graphContent.hidden;
+        const msg = button.querySelector(".toggle-icon");
+        msg.textContent = graphContent.hidden ? "+" : "-";
+    })
+})
+
+widthSlider.addEventListener("input", function () {
+    widthFactor = 2 ** Number(widthSlider.value);
+    widthNumberInput.value = widthFactor.toFixed(2);
     updatePVDiagram();
     updatePressureEquation();
 });
 
-heightNumberInput.addEventListener("change", function () {
-    heightFactor = Number(heightNumberInput.value);
-    heightSlider.value = Math.log2(heightFactor);
+widthNumberInput.addEventListener("change", function () {
+    widthFactor = Number(widthNumberInput.value);
+    widthSlider.value = Math.log2(widthFactor);
     updatePVDiagram();
     updatePressureEquation();
 })
