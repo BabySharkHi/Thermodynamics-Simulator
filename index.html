@@ -6,16 +6,20 @@
     <body>
         <div id = "main-layout">
             <div id = "simulation-panel">
-                <canvas id = "container"></canvas> 
-                <div id = "heat-controls">
-                    <img id = "fire" src="fire.png" alt="Heat">
-                    <img id = "ice" scr="ice.png" alt="Cool">
-                </div>
+                <p id = "sim-speed">1 Frame = 0.00001 seconds</p>
                 <div class = "simulation-controls">
                     <button id = "pause-play-button">▶️</button>
                     <button id = "sim-speed-button">1x</button>
                 </div>
-                <p id = "sim-speed">1 Frame = 0.00001 seconds</p>
+                <canvas id = "container"></canvas> 
+                <div id = "heat-controls">
+                    <button id = "fire-button">
+                        <img id = "fire" src="fire.png" alt="Heat">
+                    </button>
+                    <button id = "ice-button">
+                        <img id = "ice" src="ice.png" alt="Cool">
+                    </button>
+                </div>
             </div>
             <div id = "control-panel">
                 <div id="state-controls">
@@ -80,6 +84,32 @@
                         >
                         <span> x</span>
                     </div>
+                    <button 
+                        id = "lock-wall-button"
+                        data-controls="outside-pressure-controls"
+                    >🔓</button>
+                    <div id = "outside-pressure-controls" hidden>
+                        <div class = "state-control">
+                            <label for="outside-pressure-slider">Outside pressure</label>
+                            <input
+                                id="outside-pressure-slider"
+                                type="range"
+                                min="0"
+                                max="30"
+                                step="0.01"
+                                value="1"
+                            >
+                            <input
+                                id="outside-pressure-input"
+                                type="number"
+                                min="0"
+                                max="300"
+                                step="0.01"
+                                value="1"
+                            >
+                            <span> atm</span>
+                        </div>
+                    </div>
                 </div>
                 <p id = "collisions">Number of collisions: 0</p>
                 <p id = "impulse-per-collision">Impulse per collision: n/a</p>
@@ -96,26 +126,29 @@
                 <div id = "velocity-graph-content">
                     <canvas id = "velocity-graph"></canvas>
                     <div class = "graph-options">
-                        <label>
+                        <label class="graph-option graph-option-rms">
                             <input
                                 type = "checkbox"
                                 id = "show-rms"
                                 checked
                             >
+                            <span>RMS</span>
                         </label>
 
-                        <label>
+                        <label class="graph-option graph-option-mean">
                             <input type="checkbox"
                                 id = "show-mean"
                                 checked
                             >
+                            <span>Mean</span>
                         </label>
 
-                        <label>
+                        <label class="graph-option graph-option-mode">
                             <input type="checkbox"
                                 id = "show-mode"
                                 checked
                             >
+                            <span>Mode</span>
                         </label>
                     </div>
                 </div>
@@ -148,6 +181,7 @@
         </div>
         <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
         <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-annotation"></script>
+        <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2"></script>
         <script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
         <script src = "script.js"></script>
     </body>

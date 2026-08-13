@@ -90,9 +90,101 @@
     cursor: pointer;
 }
 
+.graph-options {
+    display: flex;
+    justify-content: center;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-top: 10px;
+}
+
+.graph-option {
+    --option-color: #334155;
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    padding: 7px 11px;
+    border: 2px solid #cbd5e1;
+    border-radius: 999px;
+    background: #f8fafc;
+    color: #475569;
+    font: 600 0.85rem system-ui, sans-serif;
+    cursor: pointer;
+    user-select: none;
+    transition: background-color 0.15s, border-color 0.15s,
+                color 0.15s, transform 0.15s;
+}
+
+.graph-option:hover {
+    transform: translateY(-1px);
+}
+
+.graph-option input {
+    width: 14px;
+    height: 14px;
+    margin: 0;
+    accent-color: var(--option-color);
+    cursor: pointer;
+}
+
+.graph-option:has(input:checked) {
+    border-color: var(--option-color);
+    background: color-mix(in srgb, var(--option-color) 12%, white);
+    color: var(--option-color);
+}
+
+.graph-option-rms {
+    --option-color: #2563eb;
+}
+
+.graph-option-mean {
+    --option-color: #16a34a;
+}
+
+.graph-option-mode {
+    --option-color: #9333ea;
+}
+
+#heat-controls {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    width: 100%;
+    padding: 0 50px;
+    box-sizing: border-box;
+}
+
+#fire-button,
+#ice-button {
+    padding: 0;
+    border: none;
+    background: transparent;
+    cursor: pointer;
+}
+
 #fire, #ice {
-    width: 60px;
-    filter: greyscale(100%);
+    width: 100px;
+    filter: grayscale(100%);
     opacity: 0.6;
     cursor: pointer;
+}
+
+#fire.active, #ice.active {
+    width: 160px;
+    opacity: 1.0;
+    filter: none;
+    cursor: pointer;
+}
+
+#lock-wall {
+    width: 100%;
+    text-align: center;
+    align-items: center;
+    flex-direction: column;
+}
+
+#lock-wall-button {
+    width: 60px;
+    padding: 10px 10px;
+    font-size: 2rem;
 }

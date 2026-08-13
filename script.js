@@ -4,6 +4,9 @@ const collisionDisplay = document.getElementById("collisions");
 const impulsePerCollisionDisplay = document.getElementById("impulse-per-collision");
 const pressureEquationDisplay = document.getElementById("pressure-equation");
 
+Chart.register(ChartDataLabels);
+Chart.defaults.plugins.datalabels.display = false;
+
 const pausePlayButton = document.getElementById("pause-play-button");
 let isPaused = true;
 
@@ -23,14 +26,16 @@ const simSpeedDisplay = document.getElementById("sim-speed");
 
 const STARTING_MOLECULES = 200;
 
-const maxWidthFactor = 2.0;
+const MAX_WIDTH_FACTOR = 2.0;
 canvas.width = canvas.clientWidth;
 canvas.height = canvas.clientHeight;
-const maxWidth = canvas.width;
-const startingWidth = canvas.width / maxWidthFactor;
+const MAX_WIDTH = canvas.width;
+const startingWidth = canvas.width / MAX_WIDTH_FACTOR;
+let rightWall = canvas.width / MAX_WIDTH_FACTOR;
+let rightWallVelo = 0;
+const RIGHT_WALL_MASS = 1;
 
-let targetTemp = 300;
-var widthFactor = 1;
+const STARTING_TEMP = 300;
 
 const tempSlider = document.getElementById("temp-slider");
 const tempNumberInput = document.getElementById("temp-number-input");
@@ -39,17 +44,40 @@ const moleNumberInput = document.getElementById("mole-number-input");
 const widthSlider = document.getElementById("width-slider");
 const widthScaleDisplay = document.getElementById("width-scale");
 const widthNumberInput = document.getElementById("width-number-input");
+const outsidePressureSlider = document.getElementById("outside-pressure-slider");
+const outsidePressureInput = document.getElementById("outside-pressure-input");
+
+const fireButton = document.getElementById("fire-button");
+const iceButton = document.getElementById("ice-button");
+const fireImage = document.getElementById("fire");
+const iceImage = document.getElementById("ice");
+let NEWTON_HEATING_CONSTANT = 1000;
+let iceActive = false;
+let fireActive = false; 
+const COLD_RESERVOIR_TEMP = 100;
+const HOT_RESERVOIR_TEMP = 500;
+
+let totalHeat = 0;
+let entropy = 0;
+
+const lockWallButton = document.getElementById("lock-wall-button");
+let isLocked = true;
+let outsidePressure;
+let workByGas = 0;
+let workOnGas = 0;
 
 const BOLTZMANN_CONSTANT = 1.380649e-23;
 const NITROGEN_MASS = 4.65e-26;
 const AVAGADRO_NUMBER = 6.022e23;
+const IDEAL_GAS_CONSTANT = BOLTZMANN_CONSTANT * AVAGADRO_NUMBER;
+const PASCALS_PER_ATM = 101325;
 
 const SECONDS_PER_FRAME = 1e-6;
 const METERS_PER_PIXEL = 2.03e-4;
-const SECONDS_PER_WINDOW = 1e-4;
-const SECONDS_PER_DISPLAY_WINDOW = 1e-3;
-const SECONDS_PER_PRESSURE_WINDOW = 5e-6;
-const SECONDS_PER_PV_WINDOW = 5e-4;
+const SECONDS_PER_WINDOW = 100 * SECONDS_PER_FRAME;
+const SECONDS_PER_DISPLAY_WINDOW = 1000 * SECONDS_PER_FRAME;
+const SECONDS_PER_PRESSURE_WINDOW = 5 * SECONDS_PER_FRAME;
+const SECONDS_PER_PV_WINDOW = 100 * SECONDS_PER_FRAME;
 const NUM_REPRESENTING = AVAGADRO_NUMBER / 100;
 
 const DEGREES_OF_FREEDOM = 2; //degrees of freedom
@@ -88,6 +116,14 @@ class Ball {
         this.x += this.vx * getSimulationSpeed() / METERS_PER_PIXEL;
         this.y += this.vy * getSimulationSpeed() / METERS_PER_PIXEL;
     }
+
+    changeSpeedToMatchTemp(oldTemp, newTemp) {
+        let tempRatio = newTemp / oldTemp;
+        let speedRatio = Math.sqrt(tempRatio)
+        this.vx *= speedRatio;
+        this.vy *= speedRatio;
+        this.vz *= speedRatio;
+    }
 }
 
 
@@ -98,9 +134,9 @@ function random(a, b) {
 const molecules = [];
 
 function createMolecule() {
-    let speed = calculateRMSFromTemp();
+    let speed = getRMSSpeed();
     let angle = Math.random() * 2 * Math.PI;
-    molecules.push(new Ball(Math.random() * getWidth(),
+    molecules.push(new Ball(Math.random() * rightWall,
                             Math.random() * canvas.height,
                             2,
                             "blue",
@@ -130,6 +166,7 @@ function addMolecule() {
 }
 
 function removeMolecule() {
+    let prevTemp = getTemperature();
     if (molecules.length <= 1) {
         console.log("error, no more molecules to remove");
     }
@@ -137,9 +174,9 @@ function removeMolecule() {
         let idx = Math.floor(random(0,molecules.length));
         molecules.splice(idx,1);
     }
-    tempRatio = targetTemp / calculateTemperature();
+    let curTemp = getTemperature();
     for (const b of molecules) {
-        changeSpeedToMatchTemp(b,tempRatio);
+        b.changeSpeedToMatchTemp(curTemp, prevTemp);
     }
 }
 
@@ -163,6 +200,18 @@ function update() {
         requestAnimationFrame(update);
         return;
     }
+
+    //console.log(iceActive, fireActive);
+    if (iceActive) {
+        updateHeatTemp(COLD_RESERVOIR_TEMP);
+    }
+    if (fireActive) {
+        updateHeatTemp(HOT_RESERVOIR_TEMP);
+    }
+    if (!isLocked) {
+        updateRightWall();
+    }
+
     const oldTime = curTime;
     curTime += getSimulationSpeed();
     if (Math.floor(oldTime / SECONDS_PER_PV_WINDOW) != Math.floor(curTime / SECONDS_PER_PV_WINDOW)) {
@@ -209,10 +258,11 @@ function update() {
 }
 
 function getArea() {
-    return (getWidth() * METERS_PER_PIXEL) * (canvas.height * METERS_PER_PIXEL);
+    return (rightWall * METERS_PER_PIXEL) * (canvas.height * METERS_PER_PIXEL);
 }
 
-function calculateTemperature() {
+function getTemperature() {
+    if (molecules.length == 0) return STARTING_TEMP;
     let totalKE = 0;
     for (const ball of molecules) {
         totalKE += 1/2 * ball.mass * ball.getSpeed() ** 2;
@@ -222,13 +272,8 @@ function calculateTemperature() {
 }
 
 function calculateRMSFromTemp() {
-    return Math.sqrt(DEGREES_OF_FREEDOM * BOLTZMANN_CONSTANT * targetTemp / NITROGEN_MASS);
-}
-
-function changeSpeedToMatchTemp(ball, tempRatio) {
-    ball.vx *= Math.sqrt(tempRatio);
-    ball.vy *= Math.sqrt(tempRatio);
-    ball.vz *= Math.sqrt(tempRatio);
+    let temp = molecules.length == 0 ? STARTING_TEMP : getTemperature();
+    return Math.sqrt(DEGREES_OF_FREEDOM * BOLTZMANN_CONSTANT * temp / NITROGEN_MASS);
 }
 
 function distance(x1,y1,x2,y2) {
@@ -244,8 +289,8 @@ function updateWallCollision(ball) {
         numCollisions ++;
         collisionTimes.push({curTime, impulse});
     }
-    if (ball.x + ball.radius >= getRightWall()) {
-        ball.x = ball.x - 2 * (ball.x + ball.radius - getRightWall());
+    if (ball.x + ball.radius >= rightWall) {
+        ball.x = ball.x - 2 * (ball.x + ball.radius - rightWall);
         ball.vx = -ball.vx;
         let impulse = 2 * ball.effMass * Math.abs(ball.vx);
         totalImpulse += impulse;
@@ -321,30 +366,45 @@ function updateBallBallCollision(ball1, ball2) {
 }
 
 async function updatePressureEquation() {
-    const T = calculateTemperature();
+    const T = getTemperature();
     const A = getArea();
-    const R = BOLTZMANN_CONSTANT * AVAGADRO_NUMBER;
     const n = getMoles();
     const P = getTheoreticalPressure();
     MathJax.typesetClear([pressureEquationDisplay]);
     pressureEquationDisplay.textContent = String.raw`
     \(P = \frac{nRT}{A}
-        = \frac{(${n.toFixed(2)}\ \mathrm{mol})(${R.toFixed(2)})(${T.toFixed(2)}\ \mathrm{K})}{${A.toPrecision(2)}\ \mathrm{m^2}}
+        = \frac{(${n.toFixed(2)}\ \mathrm{mol})(${IDEAL_GAS_CONSTANT.toFixed(2)})(${T.toFixed(2)}\ \mathrm{K})}{${A.toPrecision(2)}\ \mathrm{m^2}}
         = ${P.toPrecision(3)}\ \mathrm{Pa}\)`;
     await MathJax.typesetPromise([pressureEquationDisplay]);
 }
 
+function getHeight() {
+    return canvas.height * METERS_PER_PIXEL;
+}
+
 function getPerimeter() {
     return 2 * (canvas.height * METERS_PER_PIXEL) +
-           2 * (getWidth() * METERS_PER_PIXEL);
+           2 * (rightWall * METERS_PER_PIXEL);
 }
 
 function getPressure() {
     return totalImpulse / (Math.min(curTime, SECONDS_PER_WINDOW) * getPerimeter());
 }
 
+function getTheoreticalPressureAtm() {
+    return pascalToAtm(getTheoreticalPressure());
+}
+
+function atmToPascal(atm) {
+    return atm * PASCALS_PER_ATM;
+}
+
+function pascalToAtm(pascals) {
+    return pascals / PASCALS_PER_ATM;
+}
+
 function getTheoreticalPressure() {
-    return (molecules.length * NUM_REPRESENTING * BOLTZMANN_CONSTANT * targetTemp) / getArea();
+    return (molecules.length * NUM_REPRESENTING * BOLTZMANN_CONSTANT * getTemperature()) / getArea();
 }
 
 function getMoles() {
@@ -356,8 +416,9 @@ function getMoles() {
 }
 
 function getRMSSpeed() {
-    //return Math.sqrt(DEGREES_OF_FREEDOM * BOLTZMANN_CONSTANT * calculateTemperature() / molecule[0].mass);
-    var sumSquares = 0;
+    //return Math.sqrt(DEGREES_OF_FREEDOM * BOLTZMANN_CONSTANT * getTemperature() / molecule[0].mass);
+    if (molecules.length == 0) return calculateRMSFromTemp();
+    let sumSquares = 0;
     for (const ball of molecules) {
         sumSquares += ball.getSpeed() ** 2;
     }
@@ -449,6 +510,7 @@ function createSpeedGraph(intervalSize = 10, intervalCount = 100) {
                             scaleID: "x",
                             value: 0,
                             borderWidth: 2,
+                            borderColor: "#2563eb",
 
                             label: {
                                 display: true,
@@ -462,6 +524,7 @@ function createSpeedGraph(intervalSize = 10, intervalCount = 100) {
                             scaleID: "x",
                             value: 0,
                             borderWidth: 2,
+                            borderColor: "#16a34a",
 
                             label: {
                                 display: true,
@@ -475,6 +538,7 @@ function createSpeedGraph(intervalSize = 10, intervalCount = 100) {
                             scaleID: "x",
                             value: 0,
                             borderWidth:2,
+                            borderColor: "#9333ea",
                             label: {
                                 display: true,
                                 content: "Mode",
@@ -506,13 +570,29 @@ function createSpeedGraph(intervalSize = 10, intervalCount = 100) {
 
 const speedChart = createSpeedGraph();
 
+function updateSpeedAnnotationVisibility() {
+    const annotations =
+        speedChart.options.plugins.annotation.annotations;
+
+    annotations.rmsLine.display = showRMS.checked;
+    annotations.arithmeticMeanLine.display = showMean.checked;
+    annotations.modeLine.display = showMode.checked;
+    speedChart.update("none");
+}
+
+[showRMS, showMean, showMode].forEach(option => {
+    option.addEventListener("change", updateSpeedAnnotationVisibility);
+});
+
+updateSpeedAnnotationVisibility();
+
 function updateSpeedChart() {
     const {bins: speedCounts, labels: xAxisLabels} = getSpeedCountsAndLabels();
 
     speedChart.data.datasets[0].data = speedCounts;
     speedChart.data.labels = xAxisLabels;
     speedChart.options.plugins.annotation.
-               annotations.rmsLine.value = getBin(calculateRMSFromTemp());
+               annotations.rmsLine.value = getBin(getRMSSpeed());
     speedChart.options.plugins.annotation.
                annotations.rmsLine.label.content = 
                     `RMS: ${getRMSSpeed().toFixed(1)} m/s`
@@ -616,14 +696,38 @@ function createPVDiagram() {
                     borderColor: "red",
                     borderWidth: 2,
                     pointRadius: 1,
-                    tension: 0
+                    tension: 0,
+                    datalabels: {
+                        display: false
+                    }
                 },
                 {
                     label: "Current",
-                    pointbackgroundcolor: "dark blue",
                     data: [],
                     showLine: false,
-                    pointRadius: 4
+                    pointRadius: 8,
+                    pointHoverRadius: 10,
+                    pointBackgroundColor: "darkblue",
+                    pointBorderColor: "white",
+                    pointBorderWidth: 3,
+                    datalabels: {
+                        display: true,
+                        align: "top",
+                        anchor: "end",
+                        offset: 6,
+                        color: "darkblue",
+                        backgroundColor: "white",
+                        borderColor: "darkblue",
+                        borderWidth: 1,
+                        borderRadius: 4,
+                        padding: 4,
+                        font: {
+                            weight: "bold",
+                            size: 12
+                        },
+                        formatter: point =>
+                            `${point.temperature.toFixed(1)} K`
+                    }
                 }
             ]
         },
@@ -649,17 +753,19 @@ function createPVDiagram() {
 }
 
 function updatePVDiagram() {
+    const currentState = {
+        x: getArea(),
+        y: getTheoreticalPressure(),
+        temperature: getTemperature()
+    };
+
+    PVDiagram.data.datasets[1].data = [currentState];
+
     if (!PVPaused) {
-        PVData.push(
-        {
-            x: getArea(),
-            y: getTheoreticalPressure()
-        });
-        PVDiagram.data.datasets[1].data = [
-            PVData[PVData.length-1]
-        ];
-        PVDiagram.update();
+        PVData.push(currentState);
     }
+
+    PVDiagram.update("none");
 }
 
 PVPausePlayButton.addEventListener("click", function () {
@@ -681,20 +787,13 @@ PVClearButton.addEventListener("click", function () {
 
 PVDiagram = createPVDiagram();
 
-function getWidth() {
+/*function getWidth() {
     return widthFactor * startingWidth;
-}
-
-function getRightWall() {
-    return getWidth();
-}
+}*/
 
 function drawContainer() {
-    rightWall = getRightWall();
-    ctx.fillStyle = "white";
-    ctx.fillRect(rightWall,0,canvas.width-rightWall,canvas.height);
-
-
+    /*ctx.fillStyle = "white";
+    ctx.fillRect(rightWall,0,canvas.width-rightWall,canvas.height);*/
     ctx.beginPath();
     ctx.moveTo(rightWall, 0);
     ctx.lineTo(rightWall, canvas.height)
@@ -714,56 +813,74 @@ document.querySelectorAll(".graph-toggle").forEach(button => {
 })
 
 widthSlider.addEventListener("input", function () {
-    widthFactor = 2 ** Number(widthSlider.value);
-    widthNumberInput.value = widthFactor.toFixed(2);
-    updatePVDiagram();
-    updatePressureEquation();
+    setWidth(2 ** Number(widthSlider.value) * startingWidth);
 });
 
 widthNumberInput.addEventListener("change", function () {
-    widthFactor = Number(widthNumberInput.value);
+    setWidth(Number(widthNumberInput.value));
+});
+
+function setWidth(newWidth) {
+    widthFactor = newWidth / startingWidth;
+    rightWall = newWidth;
     widthSlider.value = Math.log2(widthFactor);
+    widthNumberInput.value = widthFactor.toFixed(2);
     updatePVDiagram();
     updatePressureEquation();
-})
+}
 
 moleSlider.addEventListener("input", function () {
-    newN = 100 * Number(moleSlider.value);
-    addOrRemoveMolecules(newN);
-    moleNumberInput.value = newN / 100;
-    updatePVDiagram();
-    updatePressureEquation();
+    setMoles(Number(moleSlider.value));
 });
 
 moleNumberInput.addEventListener("change", function () {
-    newN = 100 * Number(moleNumberInput.value);
-    addOrRemoveMolecules(newN);
-    moleSlider.value = newN / 100;
+    setMoles(Number(moleNumberInput.value));
+});
+
+function setMoles(newMoles) {
+    newBallCount = newMoles * AVAGADRO_NUMBER / NUM_REPRESENTING;
+    addOrRemoveMolecules(newBallCount);
+    moleSlider.value = newMoles;
+    moleNumberInput.value = newMoles.toFixed(2);
     updatePVDiagram();
     updatePressureEquation();
-})
+}
 
 tempSlider.addEventListener("input", function () {
-    const oldTemp = targetTemp;
-    targetTemp = Number(tempSlider.value);
-    for (const b of molecules) {
-        changeSpeedToMatchTemp(b, targetTemp / oldTemp);
-    }
-    tempNumberInput.value = targetTemp;
-    updatePVDiagram();
-    updatePressureEquation();
+    const oldTemp = getTemperature();
+    let newTemp = Number(tempSlider.value);
+    setTemperature(oldTemp, newTemp);
 });
 
 tempNumberInput.addEventListener("change", function () {
-    const oldTemp = targetTemp;
-    targetTemp = Number(tempNumberInput.value);
+    const oldTemp = getTemperature();
+    newTemp = Number(tempNumberInput.value);
+    setTemperature(oldTemp, newTemp);
+})
+
+function setTemperature(oldTemp, newTemp) {
+    tempSlider.value = newTemp;
+    tempNumberInput.value = newTemp;
     for (const b of molecules) {
-        changeSpeedToMatchTemp(b, targetTemp / oldTemp);
+        b.changeSpeedToMatchTemp(oldTemp, newTemp);
     }
-    tempSlider.value = targetTemp;
     updatePVDiagram();
     updatePressureEquation();
-})
+}
+
+outsidePressureSlider.addEventListener("input", function () {
+    setOutsidePressure(Number(outsidePressureSlider.value));
+});
+
+outsidePressureInput.addEventListener("change", function () {
+    setOutsidePressure(Number(outsidePressureInput.value));
+});
+
+function setOutsidePressure(atm) {
+    outsidePressureSlider.value = atm;
+    outsidePressureInput.value = atm;
+    outsidePressure = atmToPascal(atm);
+}
 
 pausePlayButton.addEventListener("click", function () {
     isPaused = !isPaused;
@@ -786,5 +903,72 @@ simSpeedButton.addEventListener("click", function () {
     simSpeedDisplay.textContent = 
         `1 frame = ${getSimulationSpeed().toPrecision(1)} seconds`;
 });
+
+fireButton.addEventListener("click", function () {
+    fireActive = !fireActive;
+    if (fireActive) {
+        iceActive = false;
+        iceImage.classList.remove("active");
+    }
+    fireImage.classList.toggle("active");
+});
+
+iceButton.addEventListener("click", function () {
+    iceActive = !iceActive;
+    if (iceActive) {
+        fireActive = false;
+        fireImage.classList.remove("active");
+    }
+    iceImage.classList.toggle("active");
+});
+
+function updateHeatTemp(reservoirTemp) {
+    let dt = getSimulationSpeed();
+    let T = getTemperature();
+    let n = getMoles();
+    let dT = NEWTON_HEATING_CONSTANT * (reservoirTemp - T) * dt;
+    let newTemp = Math.max(1, Math.min(T+dT, 1000));
+    dT = newTemp - T;
+    let dQ = DEGREES_OF_FREEDOM / 2 * n * IDEAL_GAS_CONSTANT * dT;
+    totalHeat += dQ;
+    console.log(totalHeat, dT, dQ);
+    setTemperature(T, newTemp);
+    entropy += dQ * (1/T + 1/newTemp) / 2;
+}
+
+lockWallButton.addEventListener("click", function () {
+    isLocked = !isLocked;
+    lockWallButton.textContent = isLocked ? "🔓" : "🔒";
+    const outsidePressureControls = document.getElementById(
+        lockWallButton.dataset.controls);
+    if (!isLocked) {
+        setOutsidePressure(pascalToAtm(getTheoreticalPressure()));
+    }
+    outsidePressureControls.hidden = !outsidePressureControls.hidden;
+});
+
+function updateRightWall() {
+    let oldPos = rightWall;
+    let dt = getSimulationSpeed();
+    rightWall = Math.min(startingWidth * 2, 
+                Math.max(rightWall + rightWallVelo * dt, startingWidth / 2));
+    let insidePressure = getTheoreticalPressure();
+    let force = (insidePressure - outsidePressure) * getHeight();
+    let acc = force / RIGHT_WALL_MASS;
+    rightWallVelo += acc * dt / METERS_PER_PIXEL;
+    if (rightWall <= startingWidth / 2) {
+        rightWallVelo = Math.max(rightWallVelo, 0);
+    }
+    if (rightWall >= startingWidth * 2) {
+        rightWallvelo = Math.min(rightWallVelo, 0);
+    }
+    if (rightWall > oldPos) {
+        workByGas += force * (rightWall - oldPos) * METERS_PER_PIXEL;
+    }
+    if (rightWall < oldPos) {
+        workOnGas += force * (oldPos - rightWall) * METERS_PER_PIXEL;
+    }
+    updatePressureEquation();
+}
 
 initialize();
