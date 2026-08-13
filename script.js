@@ -3,6 +3,8 @@ const ctx = canvas.getContext("2d");
 const collisionDisplay = document.getElementById("collisions");
 const impulsePerCollisionDisplay = document.getElementById("impulse-per-collision");
 const pressureEquationDisplay = document.getElementById("pressure-equation");
+const energyEquationDisplay = document.getElementById("energy-equation");
+const entropyEquationDisplay = document.getElementById("entropy-equation");
 
 Chart.register(ChartDataLabels);
 Chart.defaults.plugins.datalabels.display = false;
@@ -49,20 +51,39 @@ const outsidePressureInput = document.getElementById("outside-pressure-input");
 
 const fireButton = document.getElementById("fire-button");
 const iceButton = document.getElementById("ice-button");
+const heaterButton = document.getElementById("heater-button");
+const fridgeButton = document.getElementById("fridge-button");
 const fireImage = document.getElementById("fire");
 const iceImage = document.getElementById("ice");
+const heaterImage = document.getElementById("heater");
+const fridgeImage = document.getElementById("fridge");
 let NEWTON_HEATING_CONSTANT = 1000;
 let iceActive = false;
-let fireActive = false; 
+let fireActive = false;
+let heaterActive = false;
+let fridgeActive = false;
 const COLD_RESERVOIR_TEMP = 100;
 const HOT_RESERVOIR_TEMP = 500;
+const HEATER_POWER = 1e6;
+const FRIDGE_POWER = -1e6;
+
+document.getElementById("fire-value").textContent =
+    `${HOT_RESERVOIR_TEMP} K`;
+document.getElementById("heater-value").textContent =
+    `+${HEATER_POWER.toLocaleString()} W`;
+document.getElementById("fridge-value").textContent =
+    `${FRIDGE_POWER.toLocaleString()} W`;
+document.getElementById("ice-value").textContent =
+    `${COLD_RESERVOIR_TEMP} K`;
 
 let totalHeat = 0;
 let entropy = 0;
+let initialInternalEnergy = 0;
 
 const lockWallButton = document.getElementById("lock-wall-button");
 let isLocked = true;
 let outsidePressure;
+const WALL_MOBILITY = 100;
 let workByGas = 0;
 let workOnGas = 0;
 
@@ -86,6 +107,9 @@ let numCollisions = 0;
 let totalImpulse = 0;
 const collisionTimes = [];
 let collisionIndex = 0;
+
+const ADIABATIC_PRESSURE_CHANGE = 2e8;
+let adiabaticTarget = null;
 
 class Ball {
     constructor(x, y, radius = 10, fillColor = "black", vx = 1, vy = 1, vz = 1, mass = 1) {
@@ -184,7 +208,10 @@ function initialize() {
     for (let i = 0; i < STARTING_MOLECULES; i ++) {
         createMolecule();
     }
+    initialInternalEnergy = getKineticEnergy();
     updatePressureEquation();
+    updateEnergyEquation();
+    updateEntropyEquation();
     update();
 }
 
@@ -203,11 +230,20 @@ function update() {
 
     //console.log(iceActive, fireActive);
     if (iceActive) {
-        updateHeatTemp(COLD_RESERVOIR_TEMP);
+        updateTempFromReservoir(COLD_RESERVOIR_TEMP);
     }
     if (fireActive) {
-        updateHeatTemp(HOT_RESERVOIR_TEMP);
+        updateTempFromReservoir(HOT_RESERVOIR_TEMP);
     }
+    if (heaterActive) {
+        updateTempFromPower(HEATER_POWER);
+    }
+    if (fridgeActive) {
+        updateTempFromPower(FRIDGE_POWER);
+    }
+    
+    updateAdiabaticProcess();
+
     if (!isLocked) {
         updateRightWall();
     }
@@ -261,14 +297,18 @@ function getArea() {
     return (rightWall * METERS_PER_PIXEL) * (canvas.height * METERS_PER_PIXEL);
 }
 
-function getTemperature() {
-    if (molecules.length == 0) return STARTING_TEMP;
+function getKineticEnergy() {
     let totalKE = 0;
     for (const ball of molecules) {
-        totalKE += 1/2 * ball.mass * ball.getSpeed() ** 2;
+        totalKE += 1/2 * ball.effMass * ball.getSpeed() ** 2;
     }
+    return totalKE;
+}
 
-    return totalKE * 2 / (DEGREES_OF_FREEDOM * molecules.length * BOLTZMANN_CONSTANT);
+function getTemperature() {
+    if (molecules.length == 0) return STARTING_TEMP;
+    let totalKE = getKineticEnergy();
+    return totalKE * 2 / (DEGREES_OF_FREEDOM * getMoles() * IDEAL_GAS_CONSTANT);
 }
 
 function calculateRMSFromTemp() {
@@ -376,6 +416,35 @@ async function updatePressureEquation() {
         = \frac{(${n.toFixed(2)}\ \mathrm{mol})(${IDEAL_GAS_CONSTANT.toFixed(2)})(${T.toFixed(2)}\ \mathrm{K})}{${A.toPrecision(2)}\ \mathrm{m^2}}
         = ${P.toPrecision(3)}\ \mathrm{Pa}\)`;
     await MathJax.typesetPromise([pressureEquationDisplay]);
+}
+
+async function updateEntropyEquation() {
+    MathJax.typesetClear([entropyEquationDisplay]);
+    entropyEquationDisplay.textContent = String.raw`
+    \(\Delta S = \int \frac{\mathrm dQ}{T} = ${entropy}\)`;
+    await MathJax.typesetPromise([entropyEquationDisplay]);
+}
+
+async function updateEnergyEquation() {
+    const netWorkByGas = workByGas - workOnGas;
+    const predictedInternalEnergyChange = totalHeat - netWorkByGas;
+    const measuredInternalEnergyChange =
+        getKineticEnergy() - initialInternalEnergy;
+    const energyResidual =
+        measuredInternalEnergyChange - predictedInternalEnergyChange;
+
+    MathJax.typesetClear([energyEquationDisplay]);
+    energyEquationDisplay.textContent = String.raw`
+    \(\text{First law:}\quad
+      \Delta U = Q - W_{\mathrm{by\ gas}}
+      = (${totalHeat.toFixed(3)}\ \mathrm{J})
+      - (${netWorkByGas.toFixed(3)}\ \mathrm{J})
+      = ${predictedInternalEnergyChange.toFixed(3)}\ \mathrm{J}\)
+      <br>
+      \(\Delta U_{\mathrm{measured}} = U-U_0
+      = ${measuredInternalEnergyChange.toFixed(3)}\ \mathrm{J},\quad
+      \text{difference} = ${energyResidual.toExponential(3)}\ \mathrm{J}\)`;
+    await MathJax.typesetPromise([energyEquationDisplay]);
 }
 
 function getHeight() {
@@ -817,16 +886,20 @@ widthSlider.addEventListener("input", function () {
 });
 
 widthNumberInput.addEventListener("change", function () {
-    setWidth(Number(widthNumberInput.value));
+    setWidth(Number(widthNumberInput.value) * startingWidth);
 });
 
 function setWidth(newWidth) {
-    widthFactor = newWidth / startingWidth;
+    if (!Number.isFinite(newWidth) || newWidth <= 0) return;
+
+    const widthFactor = newWidth / startingWidth;
     rightWall = newWidth;
     widthSlider.value = Math.log2(widthFactor);
     widthNumberInput.value = widthFactor.toFixed(2);
     updatePVDiagram();
     updatePressureEquation();
+    updateEnergyEquation();
+    updateEntropyEquation();
 }
 
 moleSlider.addEventListener("input", function () {
@@ -844,6 +917,8 @@ function setMoles(newMoles) {
     moleNumberInput.value = newMoles.toFixed(2);
     updatePVDiagram();
     updatePressureEquation();
+    updateEnergyEquation();
+    updateEntropyEquation();
 }
 
 tempSlider.addEventListener("input", function () {
@@ -859,6 +934,17 @@ tempNumberInput.addEventListener("change", function () {
 })
 
 function setTemperature(oldTemp, newTemp) {
+    if (!Number.isFinite(oldTemp) || !Number.isFinite(newTemp) ||
+        oldTemp <= 0 || newTemp <= 0) {
+        console.error("Invalid temperature update", {
+            oldTemp,
+            newTemp,
+            kineticEnergy: getKineticEnergy(),
+            moles: getMoles()
+        });
+        return;
+    }
+
     tempSlider.value = newTemp;
     tempNumberInput.value = newTemp;
     for (const b of molecules) {
@@ -866,6 +952,8 @@ function setTemperature(oldTemp, newTemp) {
     }
     updatePVDiagram();
     updatePressureEquation();
+    updateEnergyEquation();
+    updateEntropyEquation();
 }
 
 outsidePressureSlider.addEventListener("input", function () {
@@ -904,25 +992,52 @@ simSpeedButton.addEventListener("click", function () {
         `1 frame = ${getSimulationSpeed().toPrecision(1)} seconds`;
 });
 
+const heatControlImages = [
+    fireImage,
+    heaterImage,
+    fridgeImage,
+    iceImage
+];
+
+function deactivateHeatControls() {
+    fireActive = false;
+    iceActive = false;
+    heaterActive = false;
+    fridgeActive = false;
+    heatControlImages.forEach(image => image.classList.remove("active"));
+}
+
+function toggleHeatControl(image, mode) {
+    const wasActive = image.classList.contains("active");
+    deactivateHeatControls();
+
+    if (wasActive) return;
+
+    image.classList.add("active");
+    fireActive = mode === "fire";
+    heaterActive = mode === "heater";
+    fridgeActive = mode === "fridge";
+    iceActive = mode === "ice";
+}
+
 fireButton.addEventListener("click", function () {
-    fireActive = !fireActive;
-    if (fireActive) {
-        iceActive = false;
-        iceImage.classList.remove("active");
-    }
-    fireImage.classList.toggle("active");
+    toggleHeatControl(fireImage, "fire");
+});
+
+heaterButton.addEventListener("click", function () {
+    toggleHeatControl(heaterImage, "heater");
+});
+
+fridgeButton.addEventListener("click", function () {
+    toggleHeatControl(fridgeImage, "fridge");
 });
 
 iceButton.addEventListener("click", function () {
-    iceActive = !iceActive;
-    if (iceActive) {
-        fireActive = false;
-        fireImage.classList.remove("active");
-    }
-    iceImage.classList.toggle("active");
+    toggleHeatControl(iceImage, "ice");
 });
 
-function updateHeatTemp(reservoirTemp) {
+
+function updateTempFromReservoir(reservoirTemp) {
     let dt = getSimulationSpeed();
     let T = getTemperature();
     let n = getMoles();
@@ -936,7 +1051,24 @@ function updateHeatTemp(reservoirTemp) {
     entropy += dQ * (1/T + 1/newTemp) / 2;
 }
 
-lockWallButton.addEventListener("click", function () {
+function updateTempFromPower(power) {
+    const dt = getSimulationSpeed();
+    const oldTemp = getTemperature();
+    const heatCapacity =
+        DEGREES_OF_FREEDOM / 2 * getMoles() * IDEAL_GAS_CONSTANT;
+    const requestedHeat = power * dt;
+    const unclampedTemp = oldTemp + requestedHeat / heatCapacity;
+    const newTemp = Math.max(1, Math.min(unclampedTemp, 1000));
+    const actualHeat = heatCapacity * (newTemp - oldTemp);
+
+    totalHeat += actualHeat;
+    entropy += actualHeat * (1 / oldTemp + 1 / newTemp) / 2;
+    setTemperature(oldTemp, newTemp);
+}
+
+lockWallButton.addEventListener("click", toggleLockWall);
+
+function toggleLockWall() {
     isLocked = !isLocked;
     lockWallButton.textContent = isLocked ? "🔓" : "🔒";
     const outsidePressureControls = document.getElementById(
@@ -945,30 +1077,146 @@ lockWallButton.addEventListener("click", function () {
         setOutsidePressure(pascalToAtm(getTheoreticalPressure()));
     }
     outsidePressureControls.hidden = !outsidePressureControls.hidden;
-});
+}
 
 function updateRightWall() {
-    let oldPos = rightWall;
-    let dt = getSimulationSpeed();
-    rightWall = Math.min(startingWidth * 2, 
-                Math.max(rightWall + rightWallVelo * dt, startingWidth / 2));
-    let insidePressure = getTheoreticalPressure();
-    let force = (insidePressure - outsidePressure) * getHeight();
-    let acc = force / RIGHT_WALL_MASS;
-    rightWallVelo += acc * dt / METERS_PER_PIXEL;
+    const oldPos = rightWall;
+    const oldTemp = getTemperature();
+    const dt = getSimulationSpeed();
+    const insidePressure = getTheoreticalPressure();
+    const pressureDifference = insidePressure - outsidePressure;
+    //let acc = force / RIGHT_WALL_MASS; Actual physical 
+    rightWallVelo = WALL_MOBILITY * pressureDifference;
+    if (pressureDifference > 0) {
+        rightWallVelo = Math.max(rightWallVelo, 10000);
+    }
+    else {
+        rightWallVelo = Math.min(rightWallVelo, -10000);
+    }
     if (rightWall <= startingWidth / 2) {
         rightWallVelo = Math.max(rightWallVelo, 0);
     }
     if (rightWall >= startingWidth * 2) {
-        rightWallvelo = Math.min(rightWallVelo, 0);
+        rightWallVelo = Math.min(rightWallVelo, 0);
     }
-    if (rightWall > oldPos) {
-        workByGas += force * (rightWall - oldPos) * METERS_PER_PIXEL;
+    rightWall = Math.min(startingWidth * 2, 
+                Math.max(rightWall + rightWallVelo * dt, startingWidth / 2));
+    const displacement = (rightWall - oldPos) * METERS_PER_PIXEL;
+    const volumeChange = getHeight() * displacement;
+    const workDoneByGas = insidePressure * volumeChange;
+    const newInternalEnergy = getKineticEnergy() - workDoneByGas;
+
+    if (workDoneByGas >= 0) {
+        workByGas += workDoneByGas;
     }
-    if (rightWall < oldPos) {
-        workOnGas += force * (oldPos - rightWall) * METERS_PER_PIXEL;
+    else {
+        workOnGas += -workDoneByGas;
     }
-    updatePressureEquation();
+
+    const newTemp = Math.max(
+        1,
+        newInternalEnergy * 2 /
+            (DEGREES_OF_FREEDOM * getMoles() * IDEAL_GAS_CONSTANT)
+    );
+    setWidth(rightWall);
+    setTemperature(oldTemp, newTemp);
+}
+
+const processButtons = document.querySelectorAll(".process-button");
+const endProcessButton = document.getElementById("end-process-button");
+const processStatus = document.getElementById("process-status");
+let activeProcess = null;
+let previousDisabledStates = new Map();
+
+const processNames = {
+    isochoric: "Constant Volume",
+    isobaric: "Constant Pressure",
+    isothermal: "Constant Temperature",
+    adiabatic: "Adiabatic"
+};
+
+function startProcess(processName, selectedButton) {
+    if (activeProcess !== null) return;
+
+    activeProcess = processName;
+    const adjustableControls = document.querySelectorAll("button, input");
+    previousDisabledStates = new Map();
+
+    adjustableControls.forEach(control => {
+        previousDisabledStates.set(control, control.disabled);
+        control.disabled = true;
+    });
+
+    selectedButton.classList.add("active");
+    selectedButton.setAttribute("aria-pressed", "true");
+    endProcessButton.disabled = false;
+    processStatus.textContent = `${processNames[processName]} process running`;
+
+    if (processName === "adiabatic") {
+        deactivateHeatControls();
+        if (isLocked) {
+            toggleLockWall();
+        }
+        rightWallVelo = 0;
+        setOutsidePressure(getTheoreticalPressureAtm());
+        adiabaticTarget = Math.min(
+            startingWidth * 2,
+            rightWall * 1.5
+        );
+    }
+}
+
+function endProcess() {
+    if (activeProcess === "adiabatic") {
+        rightWallVelo = 0;
+        isLocked = true;
+        lockWallButton.textContent = "🔒"
+    }
+    if (activeProcess === null) return;
+
+    previousDisabledStates.forEach((wasDisabled, control) => {
+        control.disabled = wasDisabled;
+    });
+
+    processButtons.forEach(button => {
+        button.classList.remove("active");
+        button.setAttribute("aria-pressed", "false");
+    });
+
+    activeProcess = null;
+    previousDisabledStates.clear();
+    endProcessButton.disabled = true;
+    processStatus.textContent = "No process running";
+}
+
+processButtons.forEach(button => {
+    button.setAttribute("aria-pressed", "false");
+    button.addEventListener("click", function () {
+        startProcess(button.dataset.process, button);
+    });
+});
+
+endProcessButton.addEventListener("click", endProcess);
+
+function updateAdiabaticProcess() {
+    if (activeProcess !== "adiabatic") return;
+
+    const dt = getSimulationSpeed();
+    outsidePressure = Math.max(
+        1,
+        outsidePressure - ADIABATIC_PRESSURE_CHANGE * dt
+    );
+    console.log(outsidePressure);
+    
+    const outsidePressureAtm = pascalToAtm(outsidePressure);
+    outsidePressureSlider.value = outsidePressureAtm;
+    outsidePressureInput.value = outsidePressureAtm;
+
+    if (rightWall >= adiabaticTarget) {
+        rightWall = adiabaticTarget;
+        rightWallVelo = 0;
+        endProcess();
+    }
 }
 
 initialize();

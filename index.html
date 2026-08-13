@@ -14,14 +14,45 @@
                 <canvas id = "container"></canvas> 
                 <div id = "heat-controls">
                     <button id = "fire-button">
-                        <img id = "fire" src="fire.png" alt="Heat">
+                        <img id = "fire" src="fire.png" alt="Hot">
+                        <span id="fire-value" class="heat-control-value"></span>
+                    </button>
+                    <button id = "heater-button">
+                        <img id = "heater" src="heater.png" alt = "Heat">
+                        <span id="heater-value" class="heat-control-value"></span>
+                    </button>
+                    <button id = "fridge-button">
+                        <img id = "fridge" src="refridgerator.png" alt = "Cool">
+                        <span id="fridge-value" class="heat-control-value"></span>
                     </button>
                     <button id = "ice-button">
-                        <img id = "ice" src="ice.png" alt="Cool">
+                        <img id = "ice" src="ice.png" alt="Cold">
+                        <span id="ice-value" class="heat-control-value"></span>
                     </button>
                 </div>
             </div>
             <div id = "control-panel">
+                <section id="process-controls" aria-labelledby="process-controls-title">
+                    <h2 id="process-controls-title">Run a Process</h2>
+                    <div class="process-buttons">
+                        <button class="process-button" data-process="isochoric">
+                            Constant Volume
+                        </button>
+                        <button class="process-button" data-process="isobaric">
+                            Constant Pressure
+                        </button>
+                        <button class="process-button" data-process="isothermal">
+                            Constant Temperature
+                        </button>
+                        <button class="process-button" data-process="adiabatic">
+                            Adiabatic
+                        </button>
+                    </div>
+                    <p id="process-status" aria-live="polite">
+                        No process running
+                    </p>
+                    <button id="end-process-button" disabled>End Process</button>
+                </section>
                 <div id="state-controls">
                     <div class="state-control">
                         <label for="temperature-slider">Temperature</label>
@@ -113,7 +144,9 @@
                 </div>
                 <p id = "collisions">Number of collisions: 0</p>
                 <p id = "impulse-per-collision">Impulse per collision: n/a</p>
-                <p id = "pressure-equation">thoeutn</p>
+                <p id = "pressure-equation"></p>
+                <p id = "energy-equation"></p>
+                <p id = "entropy-equation"></p>
             </div>
         </div>
         <div id = "graphs-panel">
