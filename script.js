@@ -62,19 +62,15 @@ let iceActive = false;
 let fireActive = false;
 let heaterActive = false;
 let fridgeActive = false;
-const COLD_RESERVOIR_TEMP = 100;
-const HOT_RESERVOIR_TEMP = 500;
-const HEATER_POWER = 1e6;
-const FRIDGE_POWER = -1e6;
+let iceTemp = 100;
+let fireTemp = 500;
+let heaterPower = 1e6;
+let fridgePower = -1e6;
 
-document.getElementById("fire-value").textContent =
-    `${HOT_RESERVOIR_TEMP} K`;
-document.getElementById("heater-value").textContent =
-    `+${HEATER_POWER.toLocaleString()} W`;
-document.getElementById("fridge-value").textContent =
-    `${FRIDGE_POWER.toLocaleString()} W`;
-document.getElementById("ice-value").textContent =
-    `${COLD_RESERVOIR_TEMP} K`;
+const fireValueDisplay = document.getElementById("fire-value");
+const heaterValueDisplay = document.getElementById("heater-value");
+const fridgeValueDisplay = document.getElementById("fridge-value");
+const iceValueDisplay = document.getElementById("ice-value");
 
 let totalHeat = 0;
 let entropy = 0;
@@ -108,8 +104,15 @@ let totalImpulse = 0;
 const collisionTimes = [];
 let collisionIndex = 0;
 
+let isochoricTarget = null;
+let isobaricTarget = null;
+
+
+let isothermalTarget = null;
+
 const ADIABATIC_PRESSURE_CHANGE = 2e8;
 let adiabaticTarget = null;
+
 
 class Ball {
     constructor(x, y, radius = 10, fillColor = "black", vx = 1, vy = 1, vz = 1, mass = 1) {
@@ -230,18 +233,20 @@ function update() {
 
     //console.log(iceActive, fireActive);
     if (iceActive) {
-        updateTempFromReservoir(COLD_RESERVOIR_TEMP);
+        updateTempFromReservoir(iceTemp);
     }
     if (fireActive) {
-        updateTempFromReservoir(HOT_RESERVOIR_TEMP);
+        updateTempFromReservoir(fireTemp);
     }
     if (heaterActive) {
-        updateTempFromPower(HEATER_POWER);
+        updateTempFromPower(heaterPower);
     }
     if (fridgeActive) {
-        updateTempFromPower(FRIDGE_POWER);
+        updateTempFromPower(fridgePower);
     }
     
+    updateIsochoricProcess();
+    updateIsobaricProcess();
     updateAdiabaticProcess();
 
     if (!isLocked) {
@@ -970,7 +975,7 @@ function setOutsidePressure(atm) {
     outsidePressure = atmToPascal(atm);
 }
 
-pausePlayButton.addEventListener("click", function () {
+function togglePause() {
     isPaused = !isPaused;
     if (isPaused) {
         pausePlayButton.textContent = "▶️";
@@ -978,7 +983,8 @@ pausePlayButton.addEventListener("click", function () {
     else {
         pausePlayButton.textContent = "⏸️";
     }
-});
+}
+pausePlayButton.addEventListener("click", togglePause);
 
 function getSimulationSpeed() {
     return simSpeedFactor * SECONDS_PER_FRAME;
@@ -1046,7 +1052,7 @@ function updateTempFromReservoir(reservoirTemp) {
     dT = newTemp - T;
     let dQ = DEGREES_OF_FREEDOM / 2 * n * IDEAL_GAS_CONSTANT * dT;
     totalHeat += dQ;
-    console.log(totalHeat, dT, dQ);
+    //console.log(totalHeat, dT, dQ);
     setTemperature(T, newTemp);
     entropy += dQ * (1/T + 1/newTemp) / 2;
 }
@@ -1152,6 +1158,25 @@ function startProcess(processName, selectedButton) {
     endProcessButton.disabled = false;
     processStatus.textContent = `${processNames[processName]} process running`;
 
+    if (processName === "isochoric") {
+        deactivateHeatControls();
+        if (!isLocked) {
+            toggleLockWall();
+        }
+        toggleHeatControl(fireImage, "fire");
+        isochoricTarget = Math.min(1000, 1.5 * getTemperature());
+    }
+
+    if (processName === "isobaric") {
+        deactivateHeatControls();
+        if (isLocked) {
+            toggleLockWall();
+        }
+        toggleHeatControl(fireImage, "fire");
+        rightWallVelo = 0;
+        isobaricTarget = Math.min(startingWidth * 2, 1.5 * rightWall);
+    }
+
     if (processName === "adiabatic") {
         deactivateHeatControls();
         if (isLocked) {
@@ -1164,13 +1189,17 @@ function startProcess(processName, selectedButton) {
             rightWall * 1.5
         );
     }
+
+    if (isPaused) {
+        togglePause();
+    }
 }
 
 function endProcess() {
     if (activeProcess === "adiabatic") {
         rightWallVelo = 0;
         isLocked = true;
-        lockWallButton.textContent = "🔒"
+        lockWallButton.textContent = "🔒";
     }
     if (activeProcess === null) return;
 
@@ -1187,6 +1216,7 @@ function endProcess() {
     previousDisabledStates.clear();
     endProcessButton.disabled = true;
     processStatus.textContent = "No process running";
+    deactivateHeatControls();
 }
 
 processButtons.forEach(button => {
@@ -1198,6 +1228,25 @@ processButtons.forEach(button => {
 
 endProcessButton.addEventListener("click", endProcess);
 
+function updateIsochoricProcess() {
+    if (activeProcess !== "isochoric") return;
+    let T = getTemperature();
+    console.log(isochoricTarget);
+    if (T >= isochoricTarget) {
+        setTemperature(T, isochoricTarget);
+        endProcess();
+    }
+}
+
+function updateIsobaricProcess() {
+    if (activeProcess !== "isobaric") return;
+    if (rightWall >= isobaricTarget) {
+        rightWall = isobaricTarget;
+        rightWallVelo = 0;
+        endProcess();
+    }
+}
+
 function updateAdiabaticProcess() {
     if (activeProcess !== "adiabatic") return;
 
@@ -1206,7 +1255,7 @@ function updateAdiabaticProcess() {
         1,
         outsidePressure - ADIABATIC_PRESSURE_CHANGE * dt
     );
-    console.log(outsidePressure);
+    //console.log(outsidePressure);
     
     const outsidePressureAtm = pascalToAtm(outsidePressure);
     outsidePressureSlider.value = outsidePressureAtm;
@@ -1218,5 +1267,103 @@ function updateAdiabaticProcess() {
         endProcess();
     }
 }
+fireValueDisplay.textContent =
+    `${fireTemp} K`;
+heaterValueDisplay.textContent =
+    `+${heaterPower.toLocaleString()} W`;
+fridgeValueDisplay.textContent =
+    `${fridgePower.toLocaleString()} W`;
+iceValueDisplay.textContent =
+    `${iceTemp} K`;
+
+function setIceTemperature(newTemp) {
+    iceTemp = newTemp;
+    iceValueDisplay.textContent = `${iceTemp} K`;
+}
+
+function setFireTemperature(newTemp) {
+    fireTemp = newTemp;
+    fireValueDisplay.textContent = `${fireTemp} K`;
+}
+
+function setHeaterPower(newPower) {
+    heaterPower = newPower;
+    heaterValueDisplay.textContent =
+        `+${heaterPower.toLocaleString()} W`;
+}
+
+function setFridgePower(newPower) {
+    fridgePower = newPower;
+    fridgeValueDisplay.textContent =
+        `${fridgePower.toLocaleString()} W`;
+}
+
+function promptForNumber(message, curVal, minVal, maxVal) {
+    const response = prompt(message, curVal);
+
+    if (response === null) {
+        return null;
+    }
+
+    const value = Number(response);
+    if (!Number.isFinite(value) || value < minVal || value > maxVal) {
+        alert("Please enter a valid number.");
+        return null;
+    }
+
+    return value;
+}
+
+fireValueDisplay.addEventListener("click", function (event) {
+    event.stopPropagation();
+    const newTemp = promptForNumber(
+        "New hot reservoir temperature in K:",
+        fireTemp,
+        iceTemp,
+        1000
+    );
+
+    if (newTemp === null) return;
+    setFireTemperature(newTemp);
+});
+
+heaterValueDisplay.addEventListener("click", function (event) {
+    event.stopPropagation();
+    const newPower = promptForNumber(
+        "New heater power in watts:",
+        heaterPower,
+        0,
+        1e9
+    );
+
+    if (newPower === null) return;
+    setHeaterPower(newPower);
+});
+
+fridgeValueDisplay.addEventListener("click", function (event) {
+    event.stopPropagation();
+    const coolingPower = promptForNumber(
+        "New refrigerator cooling power in watts:",
+        Math.abs(fridgePower),
+        0,
+        1e9
+    );
+
+    if (coolingPower === null) return;
+    setFridgePower(-coolingPower);
+});
+
+iceValueDisplay.addEventListener("click", function (event) {
+    event.stopPropagation();
+    const newTemp = promptForNumber(
+        "New cold reservoir temperature in K:",
+        iceTemp,
+        1,
+        fireTemp
+    );
+
+    if (newTemp === null) return;
+    setIceTemperature(newTemp);
+});
 
 initialize();
