@@ -14,7 +14,7 @@ let isPaused = true;
 
 const PVPausePlayButton = document.getElementById("PV-pause-play");
 const PVClearButton = document.getElementById("PV-clear");
-let PVPaused = true;
+let PVPaused = false;
 const showRMS = document.getElementById("show-rms");
 const showMean = document.getElementById("show-mean");
 const showMode = document.getElementById("show-mode");
@@ -104,14 +104,12 @@ let totalImpulse = 0;
 const collisionTimes = [];
 let collisionIndex = 0;
 
-let isochoricTarget = null;
-let isobaricTarget = null;
-
-
-let isothermalTarget = null;
-
-const ADIABATIC_PRESSURE_CHANGE = 2e8;
-let adiabaticTarget = null;
+const PRESSURE_CHANGE = 2e8;
+const WALL_MOVEMENT = 1e5;
+let processTargetType = null;
+let processTargetValue = null;
+let processStartValue = null;
+let wallDirection = 1;
 
 
 class Ball {
@@ -238,19 +236,21 @@ function update() {
     if (fireActive) {
         updateTempFromReservoir(fireTemp);
     }
-    if (heaterActive) {
+    if (heaterActive && activeProcess !== "isothermal") {
+
         updateTempFromPower(heaterPower);
     }
-    if (fridgeActive) {
+    if (fridgeActive && activeProcess !== "isothermal") {
         updateTempFromPower(fridgePower);
     }
     
     updateIsochoricProcess();
     updateIsobaricProcess();
+    updateIsothermalProcess();
     updateAdiabaticProcess();
 
-    if (!isLocked) {
-        updateRightWall();
+    if (!isLocked && activeProcess !== "isothermal") {
+        updateRightWall(null);
     }
 
     const oldTime = curTime;
@@ -1085,19 +1085,25 @@ function toggleLockWall() {
     outsidePressureControls.hidden = !outsidePressureControls.hidden;
 }
 
-function updateRightWall() {
+function updateRightWall(wallVelo) {
     const oldPos = rightWall;
     const oldTemp = getTemperature();
     const dt = getSimulationSpeed();
     const insidePressure = getTheoreticalPressure();
     const pressureDifference = insidePressure - outsidePressure;
     //let acc = force / RIGHT_WALL_MASS; Actual physical 
-    rightWallVelo = WALL_MOBILITY * pressureDifference;
-    if (pressureDifference > 0) {
-        rightWallVelo = Math.max(rightWallVelo, 10000);
-    }
-    else {
-        rightWallVelo = Math.min(rightWallVelo, -10000);
+    rightWallVelo = wallVelo === null ? WALL_MOBILITY * pressureDifference : wallVelo;
+    console.log(rightWallVelo, "rightWallVelo");
+    if (wallVelo === null) {
+        if (pressureDifference > 0) {
+            rightWallVelo = Math.max(rightWallVelo, 10000);
+        }
+        else if (pressureDifference < 0) {
+            rightWallVelo = Math.min(rightWallVelo, -10000);
+        }
+        else {
+            rightWallVelo = 0;
+        }
     }
     if (rightWall <= startingWidth / 2) {
         rightWallVelo = Math.max(rightWallVelo, 0);
@@ -1119,20 +1125,51 @@ function updateRightWall() {
         workOnGas += -workDoneByGas;
     }
 
-    const newTemp = Math.max(
+    const power = workDoneByGas / dt;
+    if (activeProcess === "isothermal") {
+        totalHeat += workDoneByGas;
+        entropy += workDoneByGas / oldTemp;
+        if (power >= 0) {
+            if (!heaterActive) {
+                toggleHeatControl(heaterImage, "heater");
+            }
+            setHeaterPower(Math.round(power));
+        }
+        else {
+            if (!fridgeActive) {
+                toggleHeatControl(fridgeImage, "fridge");
+            }
+            setFridgePower(Math.round(power));
+        }
+    }
+    else {
+        const newTemp = Math.max(
         1,
         newInternalEnergy * 2 /
             (DEGREES_OF_FREEDOM * getMoles() * IDEAL_GAS_CONSTANT)
-    );
+        );
+        setTemperature(oldTemp, newTemp);
+    }
     setWidth(rightWall);
-    setTemperature(oldTemp, newTemp);
 }
 
 const processButtons = document.querySelectorAll(".process-button");
 const endProcessButton = document.getElementById("end-process-button");
+const startProcessButton = document.getElementById("start-process-button");
+const processTargetControls = document.getElementById("process-target-controls");
+const processTargetRadios = document.querySelectorAll(
+    'input[name="process-target-type"]'
+);
+const processTargetInputs = {
+    pressure: document.getElementById("pressure-target-value"),
+    width: document.getElementById("width-target-value"),
+    temperature: document.getElementById("temperature-target-value")
+};
 const processStatus = document.getElementById("process-status");
 let activeProcess = null;
+let selectedProcess = null;
 let previousDisabledStates = new Map();
+let wallWasLockedBeforeProcess = null;
 
 const processNames = {
     isochoric: "Constant Volume",
@@ -1141,11 +1178,75 @@ const processNames = {
     adiabatic: "Adiabatic"
 };
 
-function startProcess(processName, selectedButton) {
+const processTargetOptions = {
+    isochoric: ["pressure", "temperature"],
+    isobaric: ["width", "temperature"],
+    isothermal: ["pressure", "width"],
+    adiabatic: ["pressure", "width", "temperature"]
+};
+
+const targetSettings = {
+    pressure: { label: "Pressure", unit: "atm", min: 0.01, max: 300, step: 0.01 },
+    width: { label: "Width", unit: "x", min: 0.5, max: 2, step: 0.01 },
+    temperature: { label: "Temperature", unit: "K", min: 1, max: 1000, step: 1 }
+};
+
+function updateTargetInputs(processName) {
+    const allowedTargets = processTargetOptions[processName];
+
+    processTargetRadios.forEach(radio => {
+        const targetType = radio.value;
+        const allowed = allowedTargets.includes(targetType);
+        const input = processTargetInputs[targetType];
+        const setting = targetSettings[targetType];
+        const row = radio.closest(".process-target-option");
+
+        radio.disabled = !allowed;
+        radio.checked = false;
+        input.disabled = !allowed;
+        input.min = setting.min;
+        input.max = setting.max;
+        input.step = setting.step;
+        row.classList.toggle("unavailable", !allowed);
+
+        if (targetType === "pressure") {
+            input.value = getTheoreticalPressureAtm().toFixed(2);
+        } else if (targetType === "width") {
+            input.value = (rightWall / startingWidth).toFixed(2);
+        } else {
+            input.value = getTemperature().toFixed(0);
+        }
+    });
+
+    const firstAllowedRadio = Array.from(processTargetRadios)
+        .find(radio => !radio.disabled);
+    firstAllowedRadio.checked = true;
+}
+
+function selectProcess(processName, selectedButton) {
     if (activeProcess !== null) return;
 
+    selectedProcess = processName;
+    processButtons.forEach(button => {
+        const selected = button === selectedButton;
+        button.classList.toggle("active", selected);
+        button.setAttribute("aria-pressed", String(selected));
+    });
+
+    processTargetControls.hidden = false;
+    processStatus.textContent = `${processNames[processName]} selected`;
+    updateTargetInputs(processName);
+}
+
+function startProcess(processName, selectedButton, targetType, targetValue) {
+    if (activeProcess !== null) return;
+
+    wallWasLockedBeforeProcess = isLocked;
     activeProcess = processName;
-    const adjustableControls = document.querySelectorAll("button, input");
+    processTargetType = targetType;
+    processTargetValue = targetValue;
+    processStartValue = getCurrentProcessTargetValue();
+    const adjustableControls = document.querySelectorAll("button, input, select");
     previousDisabledStates = new Map();
 
     adjustableControls.forEach(control => {
@@ -1156,6 +1257,11 @@ function startProcess(processName, selectedButton) {
     selectedButton.classList.add("active");
     selectedButton.setAttribute("aria-pressed", "true");
     endProcessButton.disabled = false;
+    pausePlayButton.disabled = false;
+    simSpeedButton.disabled = false;
+    PVPausePlayButton.disabled = false;
+    PVClearButton.disabled = false;
+    
     processStatus.textContent = `${processNames[processName]} process running`;
 
     if (processName === "isochoric") {
@@ -1163,8 +1269,12 @@ function startProcess(processName, selectedButton) {
         if (!isLocked) {
             toggleLockWall();
         }
-        toggleHeatControl(fireImage, "fire");
-        isochoricTarget = Math.min(1000, 1.5 * getTemperature());
+        const needsHeating = processTargetValue >= processStartValue;
+        console.log(needsHeating, processTargetValue, processStartValue);
+        toggleHeatControl(
+            needsHeating ? heaterImage : fridgeImage,
+            needsHeating ? "heater" : "fridge"
+        );
     }
 
     if (processName === "isobaric") {
@@ -1172,9 +1282,27 @@ function startProcess(processName, selectedButton) {
         if (isLocked) {
             toggleLockWall();
         }
-        toggleHeatControl(fireImage, "fire");
         rightWallVelo = 0;
-        isobaricTarget = Math.min(startingWidth * 2, 1.5 * rightWall);
+        const needsHeating = processTargetValue >= processStartValue;
+        toggleHeatControl(
+            needsHeating ? heaterImage : fridgeImage,
+            needsHeating ? "heater" : "fridge"
+        );
+    }
+
+    if (processName === "isothermal") {
+        deactivateHeatControls();
+        if (isLocked) {
+            toggleLockWall();
+        }
+        rightWallVelo = 0;
+        let wallBoolean = 2 * (processTargetValue >= processStartValue) - 1;
+        wallDirection = (processTargetType === "width"
+                        ? wallBoolean : -wallBoolean);
+        toggleHeatControl(heaterImage, "heater");
+        //setFireTemperature(getTemperature());
+        //toggleHeatControl(fireImage, "fire");
+        //NEWTON_HEATING_CONSTANT *= 1000;
     }
 
     if (processName === "adiabatic") {
@@ -1183,11 +1311,14 @@ function startProcess(processName, selectedButton) {
             toggleLockWall();
         }
         rightWallVelo = 0;
+        if (processTargetType === "width") {
+            wallDirection = processTargetValue >= processCurrentValue;
+        }
+        else {
+            wallDirection = processTargetValue <= processCurrentValue;
+        }
+        wallDirection = 2 * wallDirection - 1;
         setOutsidePressure(getTheoreticalPressureAtm());
-        adiabaticTarget = Math.min(
-            startingWidth * 2,
-            rightWall * 1.5
-        );
     }
 
     if (isPaused) {
@@ -1196,12 +1327,12 @@ function startProcess(processName, selectedButton) {
 }
 
 function endProcess() {
-    if (activeProcess === "adiabatic") {
-        rightWallVelo = 0;
-        isLocked = true;
-        lockWallButton.textContent = "🔒";
-    }
     if (activeProcess === null) return;
+
+    rightWallVelo = 0;
+    if (isLocked !== wallWasLockedBeforeProcess) {
+        toggleLockWall();
+    }
 
     previousDisabledStates.forEach((wasDisabled, control) => {
         control.disabled = wasDisabled;
@@ -1213,6 +1344,10 @@ function endProcess() {
     });
 
     activeProcess = null;
+    processTargetType = null;
+    processTargetValue = null;
+    processStartValue = null;
+    wallWasLockedBeforeProcess = null;
     previousDisabledStates.clear();
     endProcessButton.disabled = true;
     processStatus.textContent = "No process running";
@@ -1222,28 +1357,86 @@ function endProcess() {
 processButtons.forEach(button => {
     button.setAttribute("aria-pressed", "false");
     button.addEventListener("click", function () {
-        startProcess(button.dataset.process, button);
+        selectProcess(button.dataset.process, button);
     });
+});
+
+startProcessButton.addEventListener("click", function () {
+    if (selectedProcess === null) return;
+
+    const selectedTarget = Array.from(processTargetRadios)
+        .find(radio => radio.checked && !radio.disabled);
+    if (!selectedTarget) return;
+
+    const targetType = selectedTarget.value;
+    const targetValue = Number(processTargetInputs[targetType].value);
+    const setting = targetSettings[targetType];
+    if (!Number.isFinite(targetValue) ||
+        targetValue < setting.min || targetValue > setting.max) {
+        processStatus.textContent =
+            `Enter a target from ${setting.min} to ${setting.max} ${setting.unit}`;
+        return;
+    }
+
+    const selectedButton = document.querySelector(
+        `.process-button[data-process="${selectedProcess}"]`
+    );
+    startProcess(
+        selectedProcess,
+        selectedButton,
+        targetType,
+        targetValue
+    );
 });
 
 endProcessButton.addEventListener("click", endProcess);
 
+function getCurrentProcessTargetValue() {
+    if (processTargetType === "pressure") {
+        return pascalToAtm(getTheoreticalPressure());
+    }
+    if (processTargetType === "width") {
+        return rightWall / startingWidth;
+    }
+    if (processTargetType === "temperature") {
+        return getTemperature();
+    }
+    return null;
+}
+
+function reachedProcessTarget() {
+    const currentValue = getCurrentProcessTargetValue();
+    console.log(processTargetType, processTargetValue, currentValue, processStartValue);
+    return processTargetValue >= processStartValue
+        ? currentValue >= processTargetValue
+        : currentValue <= processTargetValue;
+}
+
 function updateIsochoricProcess() {
     if (activeProcess !== "isochoric") return;
-    let T = getTemperature();
-    console.log(isochoricTarget);
-    if (T >= isochoricTarget) {
-        setTemperature(T, isochoricTarget);
+    if (reachedProcessTarget()) {
         endProcess();
     }
 }
 
 function updateIsobaricProcess() {
     if (activeProcess !== "isobaric") return;
-    if (rightWall >= isobaricTarget) {
-        rightWall = isobaricTarget;
+    if (reachedProcessTarget()) {
         rightWallVelo = 0;
         endProcess();
+    }
+}
+
+function updateIsothermalProcess() {
+    if (activeProcess !== "isothermal") return;
+    const dt = getSimulationSpeed();
+    updateRightWall(wallDirection * WALL_MOVEMENT);
+    setOutsidePressure(pascalToAtm(getTheoreticalPressure()));
+    console.log(rightWall);
+    if (reachedProcessTarget()) {
+        rightWallVelo = 0;
+        endProcess();
+        //NEWTON_HEATING_CONSTANT /= 1000;
     }
 }
 
@@ -1253,16 +1446,14 @@ function updateAdiabaticProcess() {
     const dt = getSimulationSpeed();
     outsidePressure = Math.max(
         1,
-        outsidePressure - ADIABATIC_PRESSURE_CHANGE * dt
+        outsidePressure -
+            wallDirection * PRESSURE_CHANGE * dt
     );
     //console.log(outsidePressure);
     
-    const outsidePressureAtm = pascalToAtm(outsidePressure);
-    outsidePressureSlider.value = outsidePressureAtm;
-    outsidePressureInput.value = outsidePressureAtm;
+    setOutsidePressure(pascalToAtm(outsidePressure));
 
-    if (rightWall >= adiabaticTarget) {
-        rightWall = adiabaticTarget;
+    if (reachedProcessTarget()) {
         rightWallVelo = 0;
         endProcess();
     }

@@ -51,6 +51,33 @@
     color: white;
 }
 
+#process-target-controls {
+    margin-top: 10px;
+}
+
+.process-target-options {
+    display: grid;
+    gap: 5px;
+    margin-bottom: 8px;
+}
+
+.process-target-option {
+    display: grid;
+    grid-template-columns: 20px 1fr 70px 30px;
+    align-items: center;
+    text-align: left;
+}
+
+.process-target-option input[type="number"] {
+    width: 70px;
+    box-sizing: border-box;
+}
+
+.process-target-option.unavailable {
+    opacity: 0.4;
+    text-decoration: line-through;
+}
+
 #process-status {
     margin: 10px 0;
 }

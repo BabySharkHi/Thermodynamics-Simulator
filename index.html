@@ -48,6 +48,30 @@
                             Adiabatic
                         </button>
                     </div>
+                    <div id="process-target-controls" hidden>
+                        <p>Choose a target:</p>
+                        <div class="process-target-options">
+                            <label class="process-target-option" data-target="pressure">
+                                <input type="radio" name="process-target-type" value="pressure">
+                                <span>Pressure</span>
+                                <input id="pressure-target-value" type="number">
+                                <span>atm</span>
+                            </label>
+                            <label class="process-target-option" data-target="width">
+                                <input type="radio" name="process-target-type" value="width">
+                                <span>Width</span>
+                                <input id="width-target-value" type="number">
+                                <span>x</span>
+                            </label>
+                            <label class="process-target-option" data-target="temperature">
+                                <input type="radio" name="process-target-type" value="temperature">
+                                <span>Temperature</span>
+                                <input id="temperature-target-value" type="number">
+                                <span>K</span>
+                            </label>
+                        </div>
+                        <button id="start-process-button">Start</button>
+                    </div>
                     <p id="process-status" aria-live="polite">
                         No process running
                     </p>
@@ -206,7 +230,7 @@
                 <div id = "PV-diagram-content">
                     <canvas id = "PV-diagram"></canvas>
                     <div class = "PV-diagram-controls">
-                        <button id = "PV-pause-play">▶️</button>
+                        <button id = "PV-pause-play">⏸️</button>
                         <button id = "PV-clear">⏹️</button>
                     </div>
                 </div>
